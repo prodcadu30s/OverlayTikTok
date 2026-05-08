@@ -1,6 +1,6 @@
 import { STORAGE_KEY } from "./constants.js";
 import { presetFor } from "./geometry.js";
-import { createOverlayNode } from "./media.js";
+import { createOverlayNode, mediaSignature, syncOverlayNode } from "./media.js";
 import { loadProject, normalizeState } from "./state.js";
 
 const stage = document.querySelector("#runtimeStage");
@@ -32,10 +32,32 @@ function applyRuntimeSize() {
 
 function render() {
   applyRuntimeSize();
-  stage.innerHTML = "";
+  const existingNodes = new Map(
+    Array.from(stage.querySelectorAll(".overlay-node")).map((node) => [node.dataset.id, node]),
+  );
+  const activeIds = new Set();
+
   overlaysForRuntime().forEach((overlay) => {
-    const node = createOverlayNode(overlay, { runtime: true, selected: false, performanceMode: false });
-    stage.appendChild(node);
+    const options = { runtime: true, selected: false, performanceMode: false };
+    const mediaKey = mediaSignature(overlay, options);
+    let node = existingNodes.get(overlay.id);
+
+    if (node && node.dataset.mediaKey !== mediaKey) {
+      const replacement = createOverlayNode(overlay, options);
+      node.replaceWith(replacement);
+      node = replacement;
+    } else if (!node) {
+      node = createOverlayNode(overlay, options);
+      stage.appendChild(node);
+    } else {
+      syncOverlayNode(node, overlay, options);
+    }
+
+    activeIds.add(overlay.id);
+  });
+
+  existingNodes.forEach((node, id) => {
+    if (!activeIds.has(id)) node.remove();
   });
 }
 

@@ -9,6 +9,7 @@ export function createOverlayNode(overlay, options = {}) {
     options.selected ? "selected" : "",
   ].filter(Boolean).join(" ");
   node.dataset.id = overlay.id;
+  node.dataset.mediaKey = mediaSignature(overlay, options);
   applyOverlayStyle(node, overlay);
 
   const viewport = document.createElement("div");
@@ -26,8 +27,22 @@ export function createOverlayNode(overlay, options = {}) {
   }
 
   node.append(viewport, label);
-  applyOverlayStyle(node, overlay);
+  syncOverlayNode(node, overlay, options);
   return node;
+}
+
+export function syncOverlayNode(node, overlay, options = {}) {
+  node.dataset.id = overlay.id;
+  node.dataset.mediaKey = mediaSignature(overlay, options);
+  node.classList.toggle("selected", options.selected === true);
+  applyOverlayStyle(node, overlay);
+  updateOverlayLabel(node, overlay);
+  syncMediaElement(node, overlay);
+}
+
+export function mediaSignature(overlay, options = {}) {
+  const mode = options.performanceMode && !options.runtime ? "placeholder" : "media";
+  return `${mode}|${overlay.type || "iframe"}|${hashString(overlay.src || "")}`;
 }
 
 export function createMediaScaler(overlay, options = {}) {
@@ -143,6 +158,48 @@ export function addResizeHandles(node) {
 export function hasCrop(overlay) {
   const crop = overlay.crop || {};
   return Boolean(crop.top || crop.right || crop.bottom || crop.left);
+}
+
+function updateOverlayLabel(node, overlay) {
+  const label = node.querySelector(".overlay-label");
+  if (!label) return;
+
+  label.textContent = `${overlay.name || "Overlay"} | ${Math.round(overlay.x)},${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
+
+  if (hasCrop(overlay)) {
+    const badge = document.createElement("span");
+    badge.className = "crop-badge";
+    badge.textContent = "crop";
+    label.appendChild(badge);
+  }
+}
+
+function syncMediaElement(node, overlay) {
+  const media = node.querySelector(".overlay-media");
+  if (!media) return;
+
+  media.className = `overlay-media ${overlay.fit || "fill"}`;
+
+  if (media.tagName === "IMG") {
+    media.alt = overlay.name || "Overlay";
+  }
+
+  if (media.tagName === "VIDEO") {
+    media.autoplay = overlay.autoplay !== false;
+    media.loop = overlay.loop !== false;
+    media.muted = overlay.muted !== false;
+    media.playsInline = true;
+    media.controls = false;
+  }
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${value.length}:${hash >>> 0}`;
 }
 
 function sourceBox(overlay) {

@@ -9,7 +9,7 @@ import {
   resizeRect,
   snapRect,
 } from "./geometry.js";
-import { addResizeHandles, applyMediaTransform, applyOverlayStyle, createOverlayNode } from "./media.js";
+import { addResizeHandles, applyMediaTransform, createOverlayNode, mediaSignature, syncOverlayNode } from "./media.js";
 import { loadProject, normalizeOverlay, normalizeState, saveProject } from "./state.js";
 import {
   clamp,
@@ -28,7 +28,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-runtime-compat";
+const RUNTIME_BUILD = "20260508-stable-layers";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -843,22 +843,56 @@ function renderPropertiesPanel(content) {
 
 function renderStage() {
   const overlays = [...currentOverlays()].sort((a, b) => a.z - b.z);
-  els.stageObjects.innerHTML = "";
+  const existingNodes = new Map(
+    Array.from(els.stageObjects.querySelectorAll(".overlay-node")).map((node) => [node.dataset.id, node]),
+  );
+  const activeIds = new Set();
   renderGuides([]);
 
   overlays.forEach((overlay) => {
     const selected = overlay.id === selectedId;
-    const node = createOverlayNode(overlay, {
+    const options = {
       selected,
       performanceMode: state.editor.performanceMode,
       runtime: false,
-    });
+    };
+    const mediaKey = mediaSignature(overlay, options);
+    let node = existingNodes.get(overlay.id);
 
-    if (selected && !overlay.locked) addResizeHandles(node);
+    if (node && node.dataset.mediaKey !== mediaKey) {
+      const replacement = createStageOverlayNode(overlay, options);
+      node.replaceWith(replacement);
+      node = replacement;
+    } else if (!node) {
+      node = createStageOverlayNode(overlay, options);
+      els.stageObjects.appendChild(node);
+    } else {
+      syncOverlayNode(node, overlay, options);
+    }
 
-    node.addEventListener("pointerdown", (event) => onOverlayPointerDown(event, overlay));
-    els.stageObjects.appendChild(node);
+    syncResizeHandles(node, overlay, selected);
+    activeIds.add(overlay.id);
   });
+
+  existingNodes.forEach((node, id) => {
+    if (!activeIds.has(id)) node.remove();
+  });
+}
+
+function createStageOverlayNode(overlay, options) {
+  const node = createOverlayNode(overlay, options);
+  node.addEventListener("pointerdown", onStageOverlayPointerDown);
+  return node;
+}
+
+function onStageOverlayPointerDown(event) {
+  const overlay = currentOverlays().find((item) => item.id === event.currentTarget.dataset.id);
+  if (overlay) onOverlayPointerDown(event, overlay);
+}
+
+function syncResizeHandles(node, overlay, selected) {
+  node.querySelectorAll(".handle").forEach((handle) => handle.remove());
+  if (selected && !overlay.locked) addResizeHandles(node);
 }
 
 function updateStageSelection(previousId, nextId) {
@@ -1005,7 +1039,13 @@ function renderGuides(guides) {
 
 function updateSelectedNode(overlay) {
   const node = els.stageObjects.querySelector(`[data-id="${overlay.id}"]`);
-  if (node) applyOverlayStyle(node, overlay);
+  if (node) {
+    syncOverlayNode(node, overlay, {
+      selected: overlay.id === selectedId,
+      performanceMode: state.editor.performanceMode,
+      runtime: false,
+    });
+  }
 }
 
 function updateSelectedMediaTransform(overlay) {
