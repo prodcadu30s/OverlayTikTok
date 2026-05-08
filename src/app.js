@@ -817,6 +817,14 @@ function renderPropertiesPanel(content) {
   runtimeV.readOnly = true;
   content.append(fieldWrap("Runtime H", runtimeH), fieldWrap("Runtime V", runtimeV));
 
+  const runtimeButtons = document.createElement("div");
+  runtimeButtons.className = "button-row";
+  runtimeButtons.append(
+    actionButton("Copiar H", () => copyRuntimeUrl("horizontal")),
+    actionButton("Copiar V", () => copyRuntimeUrl("vertical")),
+  );
+  content.appendChild(runtimeButtons);
+
   const buttons = document.createElement("div");
   buttons.className = "button-row";
   buttons.append(
@@ -1539,18 +1547,67 @@ function normalizeLayerOrderFor(layout) {
     });
 }
 
-function runtimeUrl(layout = state.layout) {
-  return new URL(`runtime/${layout}/`, rootUrl()).href;
+function runtimeUrl(layout = state.layout, payload = "") {
+  const url = new URL(`runtime/${layout}/`, rootUrl());
+  if (payload) url.hash = `project=${payload}`;
+  return url.href;
 }
 
-async function copyRuntimeUrl() {
-  const url = runtimeUrl(state.layout);
+async function copyRuntimeUrl(layout = state.layout) {
+  setStatus("Gerando runtime");
+  const payload = await createRuntimePayload(layout);
+  const url = runtimeUrl(layout, payload);
   try {
     await navigator.clipboard.writeText(url);
-    setStatus("Runtime copiado");
+    setStatus(url.length > 60000 ? "Runtime copiado (link grande)" : "Runtime copiado");
   } catch {
     prompt("Runtime URL:", url);
   }
+}
+
+async function createRuntimePayload(layout) {
+  const project = await hydrateProjectForExport(normalizeState(state));
+  const scene = project.scenes.find((item) => item.id === project.currentSceneId) || project.scenes[0];
+  const runtimeScene = {
+    ...scene,
+    overlays: {
+      horizontal: layout === "horizontal" ? scene.overlays.horizontal : [],
+      vertical: layout === "vertical" ? scene.overlays.vertical : [],
+    },
+  };
+
+  const runtimeState = normalizeState({
+    version: project.version,
+    layout,
+    currentSceneId: runtimeScene.id,
+    editor: project.editor,
+    scenes: [runtimeScene],
+  });
+
+  return encodeRuntimeProject(runtimeState);
+}
+
+async function encodeRuntimeProject(project) {
+  const json = JSON.stringify(project);
+  const bytes = new TextEncoder().encode(json);
+  if ("CompressionStream" in window) {
+    try {
+      const compressed = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+      return `gz.${bytesToBase64Url(new Uint8Array(compressed))}`;
+    } catch (error) {
+      console.warn("Runtime compression failed", error);
+    }
+  }
+  return `json.${bytesToBase64Url(bytes)}`;
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 async function exportProject() {
