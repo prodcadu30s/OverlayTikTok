@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overlay Manager Pro</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="editor-shell">
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">OM</div>
+        <div>
+          <h1>Overlay Manager Pro</h1>
+          <span id="sceneLabel">Gameplay</span>
+        </div>
+      </div>
+
+      <div class="topbar-group segmented" aria-label="Layout">
+        <button id="layoutHorizontal" type="button" class="segment active" title="Horizontal 1920x1080">1920x1080</button>
+        <button id="layoutVertical" type="button" class="segment" title="Vertical 1080x1920">1080x1920</button>
+      </div>
+
+      <div class="topbar-group">
+        <button id="undoBtn" type="button" class="icon-btn" title="Undo">Undo</button>
+        <button id="redoBtn" type="button" class="icon-btn" title="Redo">Redo</button>
+      </div>
+
+      <div class="topbar-group">
+        <button id="zoomOutBtn" type="button" class="icon-btn" title="Zoom out">-</button>
+        <button id="zoomFitBtn" type="button" class="icon-btn" title="Fit">Fit</button>
+        <button id="zoomInBtn" type="button" class="icon-btn" title="Zoom in">+</button>
+        <span id="zoomLabel" class="pill">100%</span>
+      </div>
+
+      <div class="topbar-spacer"></div>
+
+      <div class="topbar-group">
+        <button id="copyRuntimeBtn" type="button" class="primary">Copiar Runtime</button>
+        <button id="saveBtn" type="button">Salvar</button>
+        <button id="exportBtn" type="button">Exportar</button>
+        <button id="importBtn" type="button">Importar</button>
+      </div>
+
+      <div class="save-state" id="status">Pronto</div>
+    </header>
+
+    <div class="editor-layout">
+      <aside class="dock dock-left" id="leftDock" aria-label="Paineis esquerda"></aside>
+
+      <main class="canvas-area">
+        <div class="canvas-ruler">
+          <span id="canvasInfo">1920x1080</span>
+          <span id="interactionInfo">Editor</span>
+        </div>
+        <div class="workspace" id="workspace">
+          <div class="stage-wrap" id="stageWrap">
+            <div class="stage" id="stage">
+              <div class="stage-grid" id="gridLayer"></div>
+              <div class="stage-objects" id="stageObjects"></div>
+              <div class="guides-layer" id="guidesLayer"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="dock dock-right" id="rightDock" aria-label="Paineis direita"></aside>
+    </div>
+  </div>
+
+  <input id="importInput" type="file" accept="application/json" hidden>
+  <input id="overlayFileInput" type="file" accept="image/*,video/*,.gif,.webm" multiple hidden>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
