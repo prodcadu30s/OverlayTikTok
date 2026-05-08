@@ -28,7 +28,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-panels-zoom";
+const RUNTIME_BUILD = "20260508-alt-crop";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -915,6 +915,9 @@ function updateStageSelection(previousId, nextId) {
 
 function onOverlayPointerDown(event, overlay) {
   const handle = event.target.closest(".handle");
+  const edgeDir = !handle && event.altKey ? edgeHandleFromPointer(event) : null;
+  const resizeDir = handle?.dataset.handle || edgeDir;
+  const cropMode = Boolean(resizeDir && event.altKey);
   event.preventDefault();
   event.stopPropagation();
 
@@ -934,18 +937,40 @@ function onOverlayPointerDown(event, overlay) {
   const startRect = rectFromOverlay(overlay);
   interaction = {
     id: overlay.id,
-    type: handle ? "resize" : "drag",
-    dir: handle?.dataset.handle || null,
+    type: resizeDir ? "resize" : "drag",
+    dir: resizeDir,
     clientX: event.clientX,
     clientY: event.clientY,
     startRect,
     startCrop: clone(overlay.crop),
-    cropMode: event.ctrlKey,
+    cropMode,
   };
 
-  els.interactionInfo.textContent = handle && event.ctrlKey ? "Crop" : handle ? "Resize" : "Drag";
+  els.interactionInfo.textContent = cropMode ? "Crop" : resizeDir ? "Resize" : "Drag";
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", endPointerInteraction, { once: true });
+}
+
+function edgeHandleFromPointer(event) {
+  const node = event.currentTarget;
+  if (!node?.getBoundingClientRect) return null;
+
+  const rect = node.getBoundingClientRect();
+  const threshold = 12;
+  const distances = {
+    left: event.clientX - rect.left,
+    right: rect.right - event.clientX,
+    top: event.clientY - rect.top,
+    bottom: rect.bottom - event.clientY,
+  };
+  const nearX = distances.left <= threshold || distances.right <= threshold;
+  const nearY = distances.top <= threshold || distances.bottom <= threshold;
+  let dir = "";
+
+  if (nearY) dir += distances.top <= distances.bottom ? "n" : "s";
+  if (nearX) dir += distances.left <= distances.right ? "w" : "e";
+
+  return dir || null;
 }
 
 function onPointerMove(event) {
@@ -978,7 +1003,7 @@ function onPointerMove(event) {
     return;
   }
 
-  if (interaction.type === "resize" && (event.ctrlKey || interaction.cropMode)) {
+  if (interaction.type === "resize" && (event.altKey || interaction.cropMode)) {
     const sourceWidth = Math.max(1, overlay.sourceWidth || interaction.startRect.width);
     const sourceHeight = Math.max(1, overlay.sourceHeight || interaction.startRect.height);
     const visibleWidth = Math.max(1, sourceWidth - interaction.startCrop.left - interaction.startCrop.right);
@@ -996,7 +1021,7 @@ function onPointerMove(event) {
   if (interaction.type === "resize") {
     let rect = resizeRect(interaction.startRect, interaction.dir, dx, dy, {
       layout: state.layout,
-      altKey: event.altKey,
+      fromCenter: event.ctrlKey,
       shiftKey: event.shiftKey || overlay.keepAspect,
       minSize: 24,
     });

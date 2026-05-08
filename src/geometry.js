@@ -41,7 +41,7 @@ export function clampRect(rect, layout, minSize = 20) {
 export function resizeRect(startRect, dir, dx, dy, options) {
   const minSize = options.minSize || 20;
   const aspect = startRect.width / Math.max(1, startRect.height);
-  const fromCenter = options.altKey;
+  const fromCenter = options.fromCenter === true || options.altKey === true;
   const proportional = options.shiftKey && (dir.length === 2 || dir === "e" || dir === "w" || dir === "n" || dir === "s");
   if (fromCenter) {
     const centerX = startRect.x + startRect.width / 2;
