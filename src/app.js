@@ -28,6 +28,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
+const RUNTIME_BUILD = "20260508-runtime-compat";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -1550,6 +1551,7 @@ function normalizeLayerOrderFor(layout) {
 function runtimeUrl(layout = state.layout, payload = "") {
   const safeLayout = layout === "vertical" || layout === "horizontal" ? layout : state.layout;
   const url = new URL(`runtime/${safeLayout}/`, rootUrl());
+  url.searchParams.set("v", RUNTIME_BUILD);
   if (payload) url.hash = `project=${payload}`;
   return url.href;
 }
