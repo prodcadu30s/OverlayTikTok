@@ -27,7 +27,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-scroll-panels";
+const RUNTIME_BUILD = "20260508-crop-source-expand";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -1005,6 +1005,8 @@ function onPointerMove(event) {
   if (interaction.type === "resize" && (event.altKey || interaction.cropMode)) {
     const cropped = cropFrameFromHandle(overlay, interaction.startRect, interaction.startCrop, interaction.dir, dx, dy);
     overlay.crop = cropped.crop;
+    overlay.sourceWidth = cropped.sourceWidth;
+    overlay.sourceHeight = cropped.sourceHeight;
     applyRect(overlay, cropped.rect);
     updateSelectedNode(overlay);
     updateInspectorGeometry(overlay);
@@ -1093,8 +1095,8 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   const preset = presetFor(state.layout);
   const minOutput = 12;
   const minVisible = 5;
-  const sourceWidth = Math.max(minVisible, Number(overlay.sourceWidth || startRect.width || minVisible));
-  const sourceHeight = Math.max(minVisible, Number(overlay.sourceHeight || startRect.height || minVisible));
+  let sourceWidth = Math.max(minVisible, Number(overlay.sourceWidth || startRect.width || minVisible));
+  let sourceHeight = Math.max(minVisible, Number(overlay.sourceHeight || startRect.height || minVisible));
   const visibleWidth = Math.max(minVisible, sourceWidth - startCrop.left - startCrop.right);
   const visibleHeight = Math.max(minVisible, sourceHeight - startCrop.top - startCrop.bottom);
   const scaleX = Math.max(0.001, startRect.width / visibleWidth);
@@ -1111,9 +1113,14 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   }
 
   if (dir.includes("e")) {
-    let edgeDelta = -(clamp(startCrop.right - dx / scaleX, 0, sourceWidth - startCrop.left - minVisible) - startCrop.right) * scaleX;
-    edgeDelta = clamp(edgeDelta, minOutput - startRect.width, preset.width - (startRect.x + startRect.width));
-    crop.right = Math.round(startCrop.right - edgeDelta / scaleX);
+    const edgeDelta = clamp(dx, minOutput - startRect.width, preset.width - (startRect.x + startRect.width));
+    const desiredRight = startCrop.right - edgeDelta / scaleX;
+    if (desiredRight < 0) {
+      sourceWidth += Math.abs(desiredRight);
+      crop.right = 0;
+    } else {
+      crop.right = Math.round(desiredRight);
+    }
     rect.width = startRect.width + edgeDelta;
   }
 
@@ -1126,9 +1133,14 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   }
 
   if (dir.includes("s")) {
-    let edgeDelta = -(clamp(startCrop.bottom - dy / scaleY, 0, sourceHeight - startCrop.top - minVisible) - startCrop.bottom) * scaleY;
-    edgeDelta = clamp(edgeDelta, minOutput - startRect.height, preset.height - (startRect.y + startRect.height));
-    crop.bottom = Math.round(startCrop.bottom - edgeDelta / scaleY);
+    const edgeDelta = clamp(dy, minOutput - startRect.height, preset.height - (startRect.y + startRect.height));
+    const desiredBottom = startCrop.bottom - edgeDelta / scaleY;
+    if (desiredBottom < 0) {
+      sourceHeight += Math.abs(desiredBottom);
+      crop.bottom = 0;
+    } else {
+      crop.bottom = Math.round(desiredBottom);
+    }
     rect.height = startRect.height + edgeDelta;
   }
 
@@ -1146,6 +1158,8 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   return {
     crop: finalCrop,
     rect: clampRect(rect, state.layout, minOutput),
+    sourceWidth: Math.round(sourceWidth),
+    sourceHeight: Math.round(sourceHeight),
   };
 }
 
@@ -1183,6 +1197,8 @@ function applyCropFieldValue(overlay, side, nextValue) {
 
   const cropped = cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy);
   overlay.crop = cropped.crop;
+  overlay.sourceWidth = cropped.sourceWidth;
+  overlay.sourceHeight = cropped.sourceHeight;
   applyRect(overlay, cropped.rect);
 }
 
@@ -1386,13 +1402,45 @@ async function createOverlayInputsFromFiles(files) {
   const inputs = [];
   for (const file of files) {
     const src = await storeMediaFile(file);
+    const dimensions = await readMediaDimensions(file);
     inputs.push({
       name: file.name,
       type: inferAssetType(file.name, file.type?.startsWith("video/") ? "video" : "image"),
       src,
+      sourceWidth: dimensions?.width,
+      sourceHeight: dimensions?.height,
     });
   }
   return inputs;
+}
+
+function readMediaDimensions(file) {
+  return new Promise((resolve) => {
+    if (!file?.type?.startsWith("image/") && !file?.type?.startsWith("video/")) {
+      resolve(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const done = (dimensions = null) => {
+      URL.revokeObjectURL(url);
+      resolve(dimensions);
+    };
+
+    if (file.type.startsWith("image/")) {
+      const image = new Image();
+      image.onload = () => done({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => done();
+      image.src = url;
+      return;
+    }
+
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => done({ width: video.videoWidth, height: video.videoHeight });
+    video.onerror = () => done();
+    video.src = url;
+  });
 }
 
 function openMediaDb() {
@@ -1494,6 +1542,9 @@ async function replaceOverlayFile(overlayId, file) {
       overlay.name = input.name || overlay.name;
       overlay.type = input.type;
       overlay.src = input.src;
+      overlay.sourceWidth = input.sourceWidth || overlay.width;
+      overlay.sourceHeight = input.sourceHeight || overlay.height;
+      overlay.crop = { top: 0, right: 0, bottom: 0, left: 0 };
     }, "Midia trocada");
   } catch (error) {
     console.error(error);
@@ -1570,6 +1621,8 @@ function addOverlayToScene(input, position = null) {
     y,
     width,
     height,
+    sourceWidth: input.sourceWidth || width,
+    sourceHeight: input.sourceHeight || height,
     z: maxZ() + 10,
     visible: true,
     locked: false,
