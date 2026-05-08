@@ -1548,12 +1548,15 @@ function normalizeLayerOrderFor(layout) {
 }
 
 function runtimeUrl(layout = state.layout, payload = "") {
-  const url = new URL(`runtime/${layout}/`, rootUrl());
+  const safeLayout = layout === "vertical" || layout === "horizontal" ? layout : state.layout;
+  const url = new URL(`runtime/${safeLayout}/`, rootUrl());
   if (payload) url.hash = `project=${payload}`;
   return url.href;
 }
 
 async function copyRuntimeUrl(layout = state.layout) {
+  if (layout instanceof Event || (layout && typeof layout === "object")) layout = state.layout;
+  if (layout !== "vertical" && layout !== "horizontal") layout = state.layout;
   setStatus("Gerando runtime");
   const payload = await createRuntimePayload(layout);
   const url = runtimeUrl(layout, payload);
@@ -1872,7 +1875,7 @@ els.redoBtn.addEventListener("click", redo);
 els.zoomOutBtn.addEventListener("click", () => zoomBy(-0.1));
 els.zoomFitBtn.addEventListener("click", () => setZoom(0));
 els.zoomInBtn.addEventListener("click", () => zoomBy(0.1));
-els.copyRuntimeBtn.addEventListener("click", copyRuntimeUrl);
+els.copyRuntimeBtn.addEventListener("click", () => copyRuntimeUrl(state.layout));
 els.saveBtn.addEventListener("click", () => persist("Salvo"));
 els.exportBtn.addEventListener("click", exportProject);
 els.importBtn.addEventListener("click", () => els.importInput.click());
