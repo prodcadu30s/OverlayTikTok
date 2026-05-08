@@ -2,7 +2,6 @@ import { ASSET_TYPES, LAYOUTS, LAYOUT_TEMPLATES } from "./constants.js";
 import {
   applyRect,
   clampRect,
-  cropFromHandle,
   fitScale,
   presetFor,
   rectFromOverlay,
@@ -28,7 +27,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-alt-crop";
+const RUNTIME_BUILD = "20260508-frame-crop";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -1004,15 +1003,10 @@ function onPointerMove(event) {
   }
 
   if (interaction.type === "resize" && (event.altKey || interaction.cropMode)) {
-    const sourceWidth = Math.max(1, overlay.sourceWidth || interaction.startRect.width);
-    const sourceHeight = Math.max(1, overlay.sourceHeight || interaction.startRect.height);
-    const visibleWidth = Math.max(1, sourceWidth - interaction.startCrop.left - interaction.startCrop.right);
-    const visibleHeight = Math.max(1, sourceHeight - interaction.startCrop.top - interaction.startCrop.bottom);
-    const sourceDx = dx / Math.max(0.001, interaction.startRect.width / visibleWidth);
-    const sourceDy = dy / Math.max(0.001, interaction.startRect.height / visibleHeight);
-    overlay.crop = cropFromHandle(interaction.startCrop, interaction.dir, sourceDx, sourceDy);
-    clampOverlayCrop(overlay);
-    updateSelectedMediaTransform(overlay);
+    const cropped = cropFrameFromHandle(overlay, interaction.startRect, interaction.startCrop, interaction.dir, dx, dy);
+    overlay.crop = cropped.crop;
+    applyRect(overlay, cropped.rect);
+    updateSelectedNode(overlay);
     updateInspectorGeometry(overlay);
     els.interactionInfo.textContent = "Crop";
     return;
@@ -1095,6 +1089,103 @@ function updateInspectorGeometry(overlay) {
   setFieldValue("crop.left", overlay.crop.left);
 }
 
+function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
+  const preset = presetFor(state.layout);
+  const minOutput = 12;
+  const minVisible = 5;
+  const sourceWidth = Math.max(minVisible, Number(overlay.sourceWidth || startRect.width || minVisible));
+  const sourceHeight = Math.max(minVisible, Number(overlay.sourceHeight || startRect.height || minVisible));
+  const visibleWidth = Math.max(minVisible, sourceWidth - startCrop.left - startCrop.right);
+  const visibleHeight = Math.max(minVisible, sourceHeight - startCrop.top - startCrop.bottom);
+  const scaleX = Math.max(0.001, startRect.width / visibleWidth);
+  const scaleY = Math.max(0.001, startRect.height / visibleHeight);
+  const crop = { ...startCrop };
+  const rect = { ...startRect };
+
+  if (dir.includes("w")) {
+    let edgeDelta = (clamp(startCrop.left + dx / scaleX, 0, sourceWidth - startCrop.right - minVisible) - startCrop.left) * scaleX;
+    edgeDelta = clamp(edgeDelta, -startRect.x, startRect.width - minOutput);
+    crop.left = Math.round(startCrop.left + edgeDelta / scaleX);
+    rect.x = startRect.x + edgeDelta;
+    rect.width = startRect.width - edgeDelta;
+  }
+
+  if (dir.includes("e")) {
+    let edgeDelta = -(clamp(startCrop.right - dx / scaleX, 0, sourceWidth - startCrop.left - minVisible) - startCrop.right) * scaleX;
+    edgeDelta = clamp(edgeDelta, minOutput - startRect.width, preset.width - (startRect.x + startRect.width));
+    crop.right = Math.round(startCrop.right - edgeDelta / scaleX);
+    rect.width = startRect.width + edgeDelta;
+  }
+
+  if (dir.includes("n")) {
+    let edgeDelta = (clamp(startCrop.top + dy / scaleY, 0, sourceHeight - startCrop.bottom - minVisible) - startCrop.top) * scaleY;
+    edgeDelta = clamp(edgeDelta, -startRect.y, startRect.height - minOutput);
+    crop.top = Math.round(startCrop.top + edgeDelta / scaleY);
+    rect.y = startRect.y + edgeDelta;
+    rect.height = startRect.height - edgeDelta;
+  }
+
+  if (dir.includes("s")) {
+    let edgeDelta = -(clamp(startCrop.bottom - dy / scaleY, 0, sourceHeight - startCrop.top - minVisible) - startCrop.bottom) * scaleY;
+    edgeDelta = clamp(edgeDelta, minOutput - startRect.height, preset.height - (startRect.y + startRect.height));
+    crop.bottom = Math.round(startCrop.bottom - edgeDelta / scaleY);
+    rect.height = startRect.height + edgeDelta;
+  }
+
+  const finalCrop = {
+    top: clamp(toInt(crop.top, 0), 0, sourceHeight - minVisible),
+    right: clamp(toInt(crop.right, 0), 0, sourceWidth - minVisible),
+    bottom: clamp(toInt(crop.bottom, 0), 0, sourceHeight - minVisible),
+    left: clamp(toInt(crop.left, 0), 0, sourceWidth - minVisible),
+  };
+  finalCrop.left = clamp(finalCrop.left, 0, sourceWidth - finalCrop.right - minVisible);
+  finalCrop.right = clamp(finalCrop.right, 0, sourceWidth - finalCrop.left - minVisible);
+  finalCrop.top = clamp(finalCrop.top, 0, sourceHeight - finalCrop.bottom - minVisible);
+  finalCrop.bottom = clamp(finalCrop.bottom, 0, sourceHeight - finalCrop.top - minVisible);
+
+  return {
+    crop: finalCrop,
+    rect: clampRect(rect, state.layout, minOutput),
+  };
+}
+
+function applyCropFieldValue(overlay, side, nextValue) {
+  const startRect = rectFromOverlay(overlay);
+  const startCrop = clone(overlay.crop);
+  const sourceWidth = Math.max(5, Number(overlay.sourceWidth || startRect.width || 5));
+  const sourceHeight = Math.max(5, Number(overlay.sourceHeight || startRect.height || 5));
+  const visibleWidth = Math.max(5, sourceWidth - startCrop.left - startCrop.right);
+  const visibleHeight = Math.max(5, sourceHeight - startCrop.top - startCrop.bottom);
+  const scaleX = Math.max(0.001, startRect.width / visibleWidth);
+  const scaleY = Math.max(0.001, startRect.height / visibleHeight);
+  let dir = "";
+  let dx = 0;
+  let dy = 0;
+
+  if (side === "left") {
+    dir = "w";
+    dx = (Math.max(0, nextValue) - startCrop.left) * scaleX;
+  }
+  if (side === "right") {
+    dir = "e";
+    dx = -(Math.max(0, nextValue) - startCrop.right) * scaleX;
+  }
+  if (side === "top") {
+    dir = "n";
+    dy = (Math.max(0, nextValue) - startCrop.top) * scaleY;
+  }
+  if (side === "bottom") {
+    dir = "s";
+    dy = -(Math.max(0, nextValue) - startCrop.bottom) * scaleY;
+  }
+
+  if (!dir) return;
+
+  const cropped = cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy);
+  overlay.crop = cropped.crop;
+  applyRect(overlay, cropped.rect);
+}
+
 function clampOverlayCrop(overlay) {
   const minVisible = 5;
   const sourceWidth = Math.max(minVisible, overlay.sourceWidth || overlay.width || minVisible);
@@ -1127,6 +1218,7 @@ function onInspectorInput(event) {
 
   const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
   const preset = presetFor(state.layout);
+  const cropField = field.startsWith("crop.");
 
   if (field === "name") overlay.name = String(value);
   if (field === "src") overlay.src = String(value);
@@ -1153,11 +1245,11 @@ function onInspectorInput(event) {
   if (field === "autoplay") overlay.autoplay = Boolean(value);
   if (field === "shadow") overlay.shadow = Boolean(value);
   if (field === "keepAspect") overlay.keepAspect = Boolean(value);
-  if (field.startsWith("crop.")) {
+  if (cropField) {
     const side = field.split(".")[1];
-    overlay.crop[side] = Math.max(0, toInt(value, overlay.crop[side]));
+    applyCropFieldValue(overlay, side, toInt(value, overlay.crop[side]));
   }
-  if (field === "sourceWidth" || field === "sourceHeight" || field.startsWith("crop.")) {
+  if (field === "sourceWidth" || field === "sourceHeight") {
     clampOverlayCrop(overlay);
     updateInspectorGeometry(overlay);
   }
@@ -1165,7 +1257,10 @@ function onInspectorInput(event) {
   const fullRenderFields = new Set(["name", "src", "type", "fit", "visible", "locked", "muted", "loop", "autoplay", "group", "keepAspect"]);
   if (fullRenderFields.has(field)) {
     renderStage();
-  } else if (field === "sourceWidth" || field === "sourceHeight" || field.startsWith("crop.")) {
+  } else if (cropField) {
+    updateInspectorGeometry(overlay);
+    updateSelectedNode(overlay);
+  } else if (field === "sourceWidth" || field === "sourceHeight") {
     updateSelectedMediaTransform(overlay);
   } else {
     updateSelectedNode(overlay);

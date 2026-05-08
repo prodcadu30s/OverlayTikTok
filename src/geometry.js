@@ -107,21 +107,6 @@ export function resizeRect(startRect, dir, dx, dy, options) {
   return clampRect({ x: left, y: top, width, height }, options.layout, minSize);
 }
 
-export function cropFromHandle(startCrop, dir, dx, dy) {
-  const maxCrop = 9999;
-  const crop = { ...startCrop };
-  if (dir.includes("w")) crop.left = clamp(startCrop.left + dx, 0, maxCrop);
-  if (dir.includes("e")) crop.right = clamp(startCrop.right - dx, 0, maxCrop);
-  if (dir.includes("n")) crop.top = clamp(startCrop.top + dy, 0, maxCrop);
-  if (dir.includes("s")) crop.bottom = clamp(startCrop.bottom - dy, 0, maxCrop);
-  return {
-    top: Math.round(crop.top),
-    right: Math.round(crop.right),
-    bottom: Math.round(crop.bottom),
-    left: Math.round(crop.left),
-  };
-}
-
 export function snapRect(rect, overlays, movingId, layout, gridSize) {
   const preset = presetFor(layout);
   const threshold = 8;
