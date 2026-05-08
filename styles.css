@@ -121,6 +121,7 @@ input[type="checkbox"] {
 .app {
   width: 100%;
   height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-rows: 52px 1fr;
   background:
@@ -247,14 +248,21 @@ input[type="checkbox"] {
 
 .editor-layout {
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(250px, 300px) minmax(360px, 1fr) minmax(280px, 340px);
 }
 
 .dock {
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -271,7 +279,12 @@ input[type="checkbox"] {
 }
 
 .dock-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  max-height: calc(100vh - 72px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
@@ -317,6 +330,10 @@ input[type="checkbox"] {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
 }
 
@@ -351,9 +368,47 @@ input[type="checkbox"] {
 .workspace {
   position: relative;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 42px;
   display: grid;
   place-items: center;
+}
+
+.dock,
+.panel-content,
+.scene-list,
+.layer-list,
+.workspace {
+  scrollbar-width: thin;
+  scrollbar-color: #48505c #101215;
+}
+
+.dock::-webkit-scrollbar,
+.panel-content::-webkit-scrollbar,
+.scene-list::-webkit-scrollbar,
+.layer-list::-webkit-scrollbar,
+.workspace::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dock::-webkit-scrollbar-track,
+.panel-content::-webkit-scrollbar-track,
+.scene-list::-webkit-scrollbar-track,
+.layer-list::-webkit-scrollbar-track,
+.workspace::-webkit-scrollbar-track {
+  background: #101215;
+}
+
+.dock::-webkit-scrollbar-thumb,
+.panel-content::-webkit-scrollbar-thumb,
+.scene-list::-webkit-scrollbar-thumb,
+.layer-list::-webkit-scrollbar-thumb,
+.workspace::-webkit-scrollbar-thumb {
+  border: 2px solid #101215;
+  border-radius: 999px;
+  background: #48505c;
 }
 
 .stage-wrap {
@@ -585,6 +640,20 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
+}
+
+.scene-list {
+  max-height: clamp(120px, 24vh, 260px);
+}
+
+.layer-list {
+  max-height: clamp(220px, 46vh, 620px);
 }
 
 .scene-row,
