@@ -1593,14 +1593,6 @@ async function createRuntimePayload(layout) {
 async function encodeRuntimeProject(project) {
   const json = JSON.stringify(project);
   const bytes = new TextEncoder().encode(json);
-  if ("CompressionStream" in window) {
-    try {
-      const compressed = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
-      return `gz.${bytesToBase64Url(new Uint8Array(compressed))}`;
-    } catch (error) {
-      console.warn("Runtime compression failed", error);
-    }
-  }
   return `json.${bytesToBase64Url(bytes)}`;
 }
 

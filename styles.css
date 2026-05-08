@@ -842,6 +842,21 @@ input[type="checkbox"] {
   display: none;
 }
 
+.runtime-error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(760px, 80%);
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(239, 91, 91, 0.8);
+  border-radius: 8px;
+  color: #fff4f4;
+  background: rgba(18, 20, 23, 0.96);
+  padding: 22px 26px;
+  text-align: center;
+  font: 700 30px/1.35 Arial, sans-serif;
+}
+
 @media (max-width: 1100px) {
   .topbar {
     flex-wrap: wrap;

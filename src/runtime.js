@@ -5,10 +5,11 @@ import { loadProject, normalizeState } from "./state.js";
 
 const stage = document.querySelector("#runtimeStage");
 const layout = document.body.dataset.layout === "vertical" ? "vertical" : "horizontal";
-const embeddedState = await loadEmbeddedProject();
-let state = normalizeState(embeddedState || loadProject());
+let embeddedState = null;
+let state = normalizeState(loadProject());
 let lastStorageSnapshot = localStorage.getItem(STORAGE_KEY) || "";
-const liveStorage = !embeddedState;
+let liveStorage = true;
+let runtimeLoadFailed = false;
 
 function activeScene() {
   return state.scenes.find((scene) => scene.id === state.currentSceneId) || state.scenes[0];
@@ -55,6 +56,8 @@ async function loadEmbeddedProject() {
     return JSON.parse(await decodeRuntimePayload(decodeURIComponent(match[1])));
   } catch (error) {
     console.error("Embedded runtime project failed", error);
+    runtimeLoadFailed = true;
+    showRuntimeError("Nao consegui abrir esse runtime. Copie o link novamente no editor atualizado.");
     return null;
   }
 }
@@ -73,6 +76,15 @@ async function decodeRuntimePayload(payload) {
   return new TextDecoder().decode(base64UrlToBytes(payload));
 }
 
+function showRuntimeError(message) {
+  if (!stage) return;
+  stage.innerHTML = "";
+  const errorBox = document.createElement("div");
+  errorBox.className = "runtime-error";
+  errorBox.textContent = message;
+  stage.appendChild(errorBox);
+}
+
 function base64UrlToBytes(value) {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(base64);
@@ -88,5 +100,20 @@ window.addEventListener("storage", (event) => {
   if (event.key === STORAGE_KEY) reloadAndRender();
 });
 
-if (liveStorage) window.setInterval(reloadAndRender, 1000);
-render();
+async function boot() {
+  embeddedState = await loadEmbeddedProject();
+  if (runtimeLoadFailed) {
+    applyRuntimeSize();
+    return;
+  }
+
+  if (embeddedState) {
+    state = normalizeState(embeddedState);
+    liveStorage = false;
+  }
+
+  if (liveStorage) window.setInterval(reloadAndRender, 1000);
+  render();
+}
+
+boot();
