@@ -852,15 +852,34 @@ function renderStage() {
   });
 }
 
+function updateStageSelection(previousId, nextId) {
+  if (previousId && previousId !== nextId) {
+    const previousNode = els.stageObjects.querySelector(`[data-id="${previousId}"]`);
+    if (previousNode) {
+      previousNode.classList.remove("selected");
+      previousNode.querySelectorAll(".handle").forEach((handle) => handle.remove());
+    }
+  }
+
+  const nextOverlay = currentOverlays().find((overlay) => overlay.id === nextId);
+  const nextNode = nextId ? els.stageObjects.querySelector(`[data-id="${nextId}"]`) : null;
+  if (!nextNode || !nextOverlay) return;
+
+  nextNode.classList.add("selected");
+  nextNode.querySelectorAll(".handle").forEach((handle) => handle.remove());
+  if (!nextOverlay.locked) addResizeHandles(nextNode);
+}
+
 function onOverlayPointerDown(event, overlay) {
   const handle = event.target.closest(".handle");
   event.preventDefault();
   event.stopPropagation();
 
   if (selectedId !== overlay.id) {
+    const previousId = selectedId;
     selectedId = overlay.id;
+    updateStageSelection(previousId, selectedId);
     renderDocks();
-    renderStage();
   }
 
   if (overlay.locked) {
@@ -893,7 +912,7 @@ function onPointerMove(event) {
 
   const dx = (event.clientX - interaction.clientX) / Math.max(currentScale, 0.01);
   const dy = (event.clientY - interaction.clientY) / Math.max(currentScale, 0.01);
-  const useSnap = event.shiftKey;
+  const useSnap = !event.shiftKey;
 
   if (interaction.type === "drag") {
     let rect = clampRect({
@@ -959,7 +978,8 @@ function endPointerInteraction() {
   liveFieldEditing = false;
   renderGuides([]);
   scheduleSave("Alteracao salva");
-  renderAll();
+  renderDocks();
+  updateHistoryButtons();
   els.interactionInfo.textContent = "Editor";
 }
 
@@ -1391,8 +1411,12 @@ function addOverlayToScene(input, position = null) {
 }
 
 function selectOverlay(id) {
+  if (selectedId === id) return;
+  const previousId = selectedId;
   selectedId = id;
-  renderAll();
+  updateStageSelection(previousId, selectedId);
+  renderDocks();
+  updateHistoryButtons();
 }
 
 function duplicateSelected() {
@@ -1778,8 +1802,10 @@ function propertiesCheckbox(checked, onChange) {
 
 els.stageObjects.addEventListener("pointerdown", (event) => {
   if (event.target !== els.stageObjects) return;
+  const previousId = selectedId;
   selectedId = null;
-  renderAll();
+  updateStageSelection(previousId, selectedId);
+  renderDocks();
 });
 
 els.layoutHorizontal.addEventListener("click", () => setLayout("horizontal"));
