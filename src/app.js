@@ -28,7 +28,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-stable-layers";
+const RUNTIME_BUILD = "20260508-panels-zoom";
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -1734,6 +1734,14 @@ function zoomBy(delta) {
   setZoom(clamp(base + delta, 0.15, 2.5));
 }
 
+function onEditorWheel(event) {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.deltaY === 0) return;
+  zoomBy(event.deltaY > 0 ? -0.08 : 0.08);
+}
+
 function onStageDragOver(event) {
   const types = dataTransferTypes(event);
   if (!types.includes("Files")) return;
@@ -1929,6 +1937,7 @@ els.stage.addEventListener("dragleave", onStageDragLeave);
 els.stage.addEventListener("drop", onStageDrop);
 window.addEventListener("dragover", preventUnhandledDragDrop);
 window.addEventListener("drop", preventUnhandledDragDrop);
+window.addEventListener("wheel", onEditorWheel, { passive: false });
 
 window.addEventListener("resize", () => {
   applyStageSize();

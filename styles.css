@@ -253,6 +253,7 @@ input[type="checkbox"] {
 
 .dock {
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -270,6 +271,7 @@ input[type="checkbox"] {
 }
 
 .dock-panel {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
@@ -314,6 +316,7 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
   padding: 10px;
 }
 
@@ -645,7 +648,8 @@ input[type="checkbox"] {
 }
 
 .layer-row {
-  grid-template-columns: 42px 1fr auto;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
 }
 
 .layer-thumb {
@@ -674,9 +678,12 @@ input[type="checkbox"] {
 }
 
 .row-actions {
+  grid-column: 2;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
 }
 
 .mini-btn {
@@ -733,11 +740,13 @@ input[type="checkbox"] {
 
 .button-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
 .button-row > * {
-  flex: 1 1 0;
+  flex: 1 1 74px;
+  min-width: 0;
 }
 
 .icon-button-row {
