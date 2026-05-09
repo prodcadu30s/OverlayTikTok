@@ -7,7 +7,7 @@ import {
   rectFromOverlay,
   resizeRect,
   snapRect,
-} from "./geometry.js?v=20260509-resize-scale";
+} from "./geometry.js?v=20260509-shift-free-scale";
 import { addResizeHandles, applyMediaTransform, createOverlayNode, mediaSignature, syncOverlayNode } from "./media.js";
 import { loadProject, normalizeOverlay, normalizeState, saveProject } from "./state.js";
 import {
@@ -25,7 +25,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-resize-scale";
+const RUNTIME_BUILD = "20260509-shift-free-scale";
 const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
 const IMAGE_MAX_DIMENSION = 1920;
 const IMAGE_QUALITY = 0.84;
@@ -1050,11 +1050,12 @@ function onPointerMove(event) {
   }
 
   if (interaction.type === "resize") {
-    const shiftAspect = event.shiftKey && interaction.dir?.length === 2;
+    const diagonalResize = interaction.dir?.length === 2;
+    const proportionalResize = !event.shiftKey && (diagonalResize || overlay.keepAspect);
     let rect = resizeRect(interaction.startRect, interaction.dir, dx, dy, {
       layout: state.layout,
       fromCenter: event.ctrlKey,
-      shiftKey: shiftAspect || overlay.keepAspect,
+      shiftKey: proportionalResize,
       minSize: 24,
     });
     renderGuides([]);
