@@ -23,6 +23,7 @@ body {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .runtime-stage {
@@ -76,8 +77,8 @@ body {
   border: 0;
   border-radius: inherit;
   background: transparent;
-  pointer-events: none;
   display: block;
+  pointer-events: none;
 }
 
 .overlay-media.fill {

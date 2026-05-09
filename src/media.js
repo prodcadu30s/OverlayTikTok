@@ -1,16 +1,17 @@
 import { niceType } from "./utils.js";
 
+const HASH_CACHE_LIMIT = 160;
+const hashCache = new Map();
+
 export function createOverlayNode(overlay, options = {}) {
   const node = document.createElement("div");
   node.className = [
     "overlay-node",
     overlay.visible === false ? "hidden" : "",
-    overlay.locked ? "locked" : "",
-    options.selected ? "selected" : "",
+    !options.runtime && overlay.locked ? "locked" : "",
+    !options.runtime && options.selected ? "selected" : "",
   ].filter(Boolean).join(" ");
   node.dataset.id = overlay.id;
-  node.dataset.mediaKey = mediaSignature(overlay, options);
-  applyOverlayStyle(node, overlay);
 
   const viewport = document.createElement("div");
   viewport.className = "overlay-viewport";
@@ -38,9 +39,9 @@ export function createOverlayNode(overlay, options = {}) {
 export function syncOverlayNode(node, overlay, options = {}) {
   node.dataset.id = overlay.id;
   node.dataset.mediaKey = mediaSignature(overlay, options);
-  node.classList.toggle("selected", options.selected === true);
-  applyOverlayStyle(node, overlay);
-  updateOverlayLabel(node, overlay);
+  if (!options.runtime) node.classList.toggle("selected", options.selected === true);
+  applyOverlayStyle(node, overlay, options);
+  if (!options.runtime) updateOverlayLabel(node, overlay);
   syncMediaElement(node, overlay);
 }
 
@@ -111,12 +112,13 @@ export function createMediaElement(overlay) {
   element.referrerPolicy = "no-referrer";
   element.allow = "autoplay; fullscreen";
   element.loading = "eager";
+  element.scrolling = "no";
 
   element.className = `overlay-media ${overlay.fit || "fill"}`;
   return element;
 }
 
-export function applyOverlayStyle(node, overlay) {
+export function applyOverlayStyle(node, overlay, options = {}) {
   setStyleValue(node.style, "left", `${Math.round(overlay.x)}px`);
   setStyleValue(node.style, "top", `${Math.round(overlay.y)}px`);
   setStyleValue(node.style, "width", `${Math.round(overlay.width)}px`);
@@ -128,16 +130,16 @@ export function applyOverlayStyle(node, overlay) {
   setStyleValue(node.style, "borderWidth", overlay.borderWidth ? `${Math.max(0, Number(overlay.borderWidth || 0))}px` : "");
   setStyleValue(node.style, "borderColor", overlay.borderWidth ? (overlay.borderColor || "rgba(255, 255, 255, 0.28)") : "");
   setStyleValue(node.style, "boxShadow", "");
-  const viewport = node.querySelector(".overlay-viewport");
+  const viewport = overlayViewport(node);
   if (viewport) setStyleValue(viewport.style, "filter", "");
   node.classList.toggle("hidden", overlay.visible === false);
-  node.classList.toggle("locked", overlay.locked === true);
+  if (!options.runtime) node.classList.toggle("locked", overlay.locked === true);
   applyMediaTransform(node, overlay);
 }
 
 export function applyMediaTransform(node, overlay) {
-  const scaler = node.querySelector(".overlay-scaler");
-  const media = node.querySelector(".overlay-media");
+  const scaler = overlayScaler(node);
+  const media = scaler?.firstElementChild;
   if (!scaler || !media) return;
 
   const source = sourceBox(overlay);
@@ -185,7 +187,7 @@ function updateOverlayLabel(node, overlay) {
 }
 
 function syncMediaElement(node, overlay) {
-  const media = node.querySelector(".overlay-media");
+  const media = overlayMedia(node);
   if (!media) return;
 
   media.className = `overlay-media ${overlay.fit || "fill"}`;
@@ -194,8 +196,25 @@ function syncMediaElement(node, overlay) {
 
 function canUseDirectRuntimeMedia(overlay, options, source, crop) {
   if (!options.runtime || hasCrop({ crop })) return false;
+  if (overlay.type === "image") return true;
   return Math.round(source.width) === Math.round(Number(overlay.width || 0))
     && Math.round(source.height) === Math.round(Number(overlay.height || 0));
+}
+
+function overlayViewport(node) {
+  const child = node.firstElementChild;
+  return child?.classList?.contains("overlay-viewport") ? child : null;
+}
+
+function overlayScaler(node) {
+  const child = overlayViewport(node)?.firstElementChild;
+  return child?.classList?.contains("overlay-scaler") ? child : null;
+}
+
+function overlayMedia(node) {
+  const child = overlayViewport(node)?.firstElementChild;
+  if (!child) return null;
+  return child.classList?.contains("overlay-media") ? child : child.firstElementChild;
 }
 
 function applyScaleTransform(element, scaleX, scaleY) {
@@ -208,12 +227,21 @@ function setStyleValue(style, property, value) {
 }
 
 function hashString(value) {
+  const cached = hashCache.get(value);
+  if (cached) return cached;
+
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
-  return `${value.length}:${hash >>> 0}`;
+
+  const result = `${value.length}:${hash >>> 0}`;
+  hashCache.set(value, result);
+  if (hashCache.size > HASH_CACHE_LIMIT) {
+    hashCache.delete(hashCache.keys().next().value);
+  }
+  return result;
 }
 
 function sourceBox(overlay) {

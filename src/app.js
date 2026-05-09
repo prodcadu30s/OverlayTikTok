@@ -25,7 +25,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-runtime-perf";
+const RUNTIME_BUILD = "20260509-runtime-perf-2";
 const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
 const IMAGE_MAX_DIMENSION = 1920;
 const IMAGE_QUALITY = 0.84;

@@ -1,7 +1,7 @@
 import { STORAGE_KEY } from "./constants.js";
 import { presetFor } from "./geometry.js";
 import { createOverlayNode, mediaSignature, syncOverlayNode } from "./media.js";
-import { loadProject, normalizeState } from "./state.js";
+import { loadProject, normalizeOverlay, normalizeState } from "./state.js";
 
 const stage = document.querySelector("#runtimeStage");
 const layout = document.body.dataset.layout === "vertical" ? "vertical" : "horizontal";
@@ -21,9 +21,20 @@ function activeScene() {
 
 function overlaysForRuntime() {
   const scene = activeScene();
+  const preset = presetFor(layout);
   return [...(scene?.overlays?.[layout] || [])]
-    .filter((overlay) => overlay.visible !== false)
+    .filter((overlay) => isRenderableOverlay(overlay, preset))
     .sort((a, b) => a.z - b.z);
+}
+
+function isRenderableOverlay(overlay, preset) {
+  if (!overlay || overlay.visible === false || Number(overlay.opacity ?? 1) <= 0) return false;
+  const width = Number(overlay.width || 0);
+  const height = Number(overlay.height || 0);
+  if (width <= 0 || height <= 0) return false;
+  const x = Number(overlay.x || 0);
+  const y = Number(overlay.y || 0);
+  return x < preset.width && y < preset.height && x + width > 0 && y + height > 0;
 }
 
 function applyRuntimeSize() {
@@ -85,7 +96,7 @@ function reloadAndRender() {
   const snapshot = localStorage.getItem(STORAGE_KEY) || "";
   if (snapshot === lastStorageSnapshot) return;
   lastStorageSnapshot = snapshot;
-  state = normalizeState(loadProject());
+  state = normalizeRuntimeState(loadProject());
   render();
 }
 
@@ -154,10 +165,10 @@ async function boot() {
   }
 
   if (embeddedState) {
-    state = normalizeState(embeddedState);
+    state = normalizeRuntimeState(embeddedState);
     liveStorage = false;
   } else {
-    state = normalizeState(loadProject());
+    state = normalizeRuntimeState(loadProject());
     lastStorageSnapshot = liveStorage ? localStorage.getItem(STORAGE_KEY) || "" : "";
   }
 
@@ -171,3 +182,39 @@ async function boot() {
 }
 
 boot();
+
+function normalizeRuntimeState(input) {
+  if (!input || typeof input !== "object" || !Array.isArray(input.scenes)) {
+    return normalizeState(input);
+  }
+
+  const runtimeLayout = input.layout === "vertical" || input.layout === "portrait" ? "vertical" : "horizontal";
+  const scenes = input.scenes.map((scene, index) => normalizeRuntimeScene(scene, index)).filter(Boolean);
+  if (!scenes.length) return normalizeState(input);
+
+  const currentSceneId = scenes.some((scene) => scene.id === input.currentSceneId)
+    ? input.currentSceneId
+    : scenes[0].id;
+
+  return {
+    version: input.version,
+    layout: runtimeLayout,
+    currentSceneId,
+    scenes,
+  };
+}
+
+function normalizeRuntimeScene(scene, index) {
+  if (!scene || typeof scene !== "object") return null;
+  const horizontal = Array.isArray(scene.overlays?.horizontal) ? scene.overlays.horizontal : [];
+  const vertical = Array.isArray(scene.overlays?.vertical) ? scene.overlays.vertical : [];
+
+  return {
+    id: String(scene.id || `scene-${index + 1}`),
+    name: String(scene.name || `Scene ${index + 1}`),
+    overlays: {
+      horizontal: horizontal.map(normalizeOverlay).filter(Boolean),
+      vertical: vertical.map(normalizeOverlay).filter(Boolean),
+    },
+  };
+}
