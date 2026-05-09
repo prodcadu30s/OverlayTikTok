@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Overlay Manager Pro</title>
-  <link rel="stylesheet" href="./styles.css?v=20260509-shift-free-scale">
+  <title>OverlayTikTok</title>
+  <link rel="stylesheet" href="./styles.css?v=20260509-editor-refine">
 </head>
 <body class="editor-shell">
   <div class="app" id="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">OM</div>
+        <div class="brand-mark">OT</div>
         <div>
-          <h1>Overlay Manager Pro</h1>
+          <h1>OverlayTikTok</h1>
           <span id="sceneLabel">Gameplay</span>
         </div>
       </div>
@@ -23,21 +23,21 @@
       </div>
 
       <div class="topbar-group">
-        <button id="undoBtn" type="button" class="icon-btn" title="Undo">Undo</button>
-        <button id="redoBtn" type="button" class="icon-btn" title="Redo">Redo</button>
+        <button id="undoBtn" type="button" class="icon-btn" title="Desfazer">Desfazer</button>
+        <button id="redoBtn" type="button" class="icon-btn" title="Refazer">Refazer</button>
       </div>
 
       <div class="topbar-group">
-        <button id="zoomOutBtn" type="button" class="icon-btn" title="Zoom out">-</button>
-        <button id="zoomFitBtn" type="button" class="icon-btn" title="Fit">Fit</button>
-        <button id="zoomInBtn" type="button" class="icon-btn" title="Zoom in">+</button>
+        <button id="zoomOutBtn" type="button" class="icon-btn" title="Diminuir zoom">-</button>
+        <button id="zoomFitBtn" type="button" class="icon-btn" title="Fit no stage">Fit</button>
+        <button id="zoomInBtn" type="button" class="icon-btn" title="Aumentar zoom">+</button>
         <span id="zoomLabel" class="pill">100%</span>
       </div>
 
       <div class="topbar-spacer"></div>
 
       <div class="topbar-group">
-        <button id="copyRuntimeBtn" type="button" class="primary">Copiar Runtime</button>
+        <button id="copyRuntimeBtn" type="button" class="primary" title="Copiar para OBS/TikTok">Copiar Runtime</button>
         <button id="saveBtn" type="button">Salvar</button>
         <button id="exportBtn" type="button">Exportar</button>
         <button id="importBtn" type="button">Importar</button>
@@ -74,6 +74,6 @@
   <input id="previewImageInput" type="file" accept="image/*" hidden>
   <input id="imageAssetInput" type="file" accept=".png,.jpg,.jpeg,.webp,.avif,.bmp,image/png,image/jpeg,image/webp,image/avif,image/bmp" multiple hidden>
 
-  <script type="module" src="./src/app.js?v=20260509-shift-free-scale"></script>
+  <script type="module" src="./src/app.js?v=20260509-editor-refine"></script>
 </body>
 </html>

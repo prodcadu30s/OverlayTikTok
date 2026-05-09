@@ -18,7 +18,7 @@ export function createOverlayNode(overlay, options = {}) {
 
   const label = document.createElement("div");
   label.className = "overlay-label";
-  label.textContent = `${overlay.name || "Overlay"} | ${Math.round(overlay.x)},${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
+  label.textContent = `${overlay.name || "Overlay"} | x:${Math.round(overlay.x)} y:${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
   if (hasCrop(overlay)) {
     const badge = document.createElement("span");
     badge.className = "crop-badge";
@@ -157,7 +157,7 @@ function updateOverlayLabel(node, overlay) {
   const label = node.querySelector(".overlay-label");
   if (!label) return;
 
-  label.textContent = `${overlay.name || "Overlay"} | ${Math.round(overlay.x)},${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
+  label.textContent = `${overlay.name || "Overlay"} | x:${Math.round(overlay.x)} y:${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
 
   if (hasCrop(overlay)) {
     const badge = document.createElement("span");
