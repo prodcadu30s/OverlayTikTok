@@ -802,6 +802,9 @@ input[type="checkbox"] {
 .layer-row {
   grid-template-columns: 42px minmax(0, 1fr);
   align-items: start;
+  row-gap: 6px;
+  min-height: 72px;
+  overflow: visible;
 }
 
 .layer-thumb {
@@ -836,6 +839,13 @@ input[type="checkbox"] {
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
+}
+
+.layer-row .row-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  min-height: 26px;
 }
 
 .mini-btn {
