@@ -48,21 +48,12 @@ export function uniqueId(base, usedIds) {
 }
 
 export function inferAssetType(source = "", fallback = "iframe") {
-  const src = String(source).split("?")[0].split("#")[0].toLowerCase();
-  if (src.endsWith(".gif")) return "gif";
-  if (src.endsWith(".webm")) return "webm";
-  if (/\.(png|jpe?g|avif|webp|bmp|svg)$/.test(src)) return "image";
-  if (/\.(mp4|mov|m4v|ogg|ogv)$/.test(src)) return "video";
   return ASSET_TYPES.includes(fallback) ? fallback : "iframe";
 }
 
 export function niceType(type) {
   const labels = {
     iframe: "Iframe",
-    image: "Imagem",
-    video: "Video",
-    gif: "GIF",
-    webm: "WEBM",
   };
   return labels[type] || "Asset";
 }
@@ -79,15 +70,6 @@ export function readTextFile(file) {
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(reader.error);
     reader.readAsText(file);
-  });
-}
-
-export function readDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
   });
 }
 

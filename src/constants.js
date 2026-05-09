@@ -1,6 +1,7 @@
 export const STORAGE_KEY = "overlay_manager_v2";
 export const LEGACY_STORAGE_KEY = "overlay_manager_v1";
 export const CURRENT_VERSION = 2;
+export const MAX_SOURCE_SIZE = 4096;
 
 export const LAYOUTS = {
   horizontal: { id: "horizontal", label: "1920x1080", width: 1920, height: 1080 },
@@ -15,7 +16,7 @@ export const DEFAULT_SCENES = [
   { id: "ending", name: "Ending" },
 ];
 
-export const ASSET_TYPES = ["iframe", "image", "video", "gif", "webm"];
+export const ASSET_TYPES = ["iframe"];
 
 export const LAYOUT_TEMPLATES = [
   {
@@ -25,7 +26,6 @@ export const LAYOUT_TEMPLATES = [
     overlays: [
       { name: "Gameplay", type: "iframe", src: "about:blank", x: 54, y: 300, width: 972, height: 972, z: 10, radius: 22, borderWidth: 2, borderColor: "#32d0c4" },
       { name: "Chat", type: "iframe", src: "about:blank", x: 54, y: 1310, width: 972, height: 420, z: 20, radius: 18, borderWidth: 1, borderColor: "#8cc152" },
-      { name: "Webcam", type: "image", src: "", x: 720, y: 84, width: 300, height: 170, z: 30, radius: 18, shadow: true },
     ],
   },
   {
@@ -35,7 +35,6 @@ export const LAYOUT_TEMPLATES = [
     overlays: [
       { name: "Gameplay", type: "iframe", src: "about:blank", x: 60, y: 60, width: 1320, height: 744, z: 10, radius: 12 },
       { name: "Chat", type: "iframe", src: "about:blank", x: 1420, y: 60, width: 440, height: 960, z: 20, radius: 12, borderWidth: 1, borderColor: "#32d0c4" },
-      { name: "Webcam", type: "image", src: "", x: 60, y: 830, width: 420, height: 236, z: 30, radius: 14, shadow: true },
     ],
   },
   {
@@ -52,9 +51,8 @@ export const LAYOUT_TEMPLATES = [
     name: "Webcam + alertas",
     layout: "vertical",
     overlays: [
-      { name: "Webcam", type: "image", src: "", x: 140, y: 160, width: 800, height: 450, z: 10, radius: 24, shadow: true },
-      { name: "Alertas", type: "iframe", src: "about:blank", x: 90, y: 680, width: 900, height: 230, z: 20, radius: 16 },
-      { name: "Chat", type: "iframe", src: "about:blank", x: 90, y: 960, width: 900, height: 740, z: 30, radius: 16 },
+      { name: "Alertas", type: "iframe", src: "about:blank", x: 90, y: 680, width: 900, height: 230, z: 10, radius: 16 },
+      { name: "Chat", type: "iframe", src: "about:blank", x: 90, y: 960, width: 900, height: 740, z: 20, radius: 16 },
     ],
   },
 ];

@@ -78,29 +78,11 @@ export function createMediaScaler(overlay, options = {}) {
 }
 
 export function createMediaElement(overlay) {
-  let element;
-
-  if (overlay.type === "image" || overlay.type === "gif") {
-    element = document.createElement("img");
-    element.decoding = "async";
-    element.loading = "eager";
-    setMediaSource(element, overlay);
-    element.alt = overlay.name || "Overlay";
-  } else if (overlay.type === "video" || overlay.type === "webm") {
-    element = document.createElement("video");
-    setMediaSource(element, overlay);
-    element.autoplay = overlay.autoplay !== false;
-    element.loop = overlay.loop !== false;
-    element.muted = overlay.muted !== false;
-    element.playsInline = true;
-    element.controls = false;
-  } else {
-    element = document.createElement("iframe");
-    element.src = overlay.src || "about:blank";
-    element.referrerPolicy = "no-referrer";
-    element.allow = "autoplay; clipboard-read; clipboard-write; fullscreen";
-    element.loading = "eager";
-  }
+  const element = document.createElement("iframe");
+  element.src = overlay.src || "about:blank";
+  element.referrerPolicy = "no-referrer";
+  element.allow = "autoplay; fullscreen";
+  element.loading = "eager";
 
   element.className = `overlay-media ${overlay.fit || "fill"}`;
   return element;
@@ -117,9 +99,9 @@ export function applyOverlayStyle(node, overlay) {
   node.style.borderRadius = `${Math.max(0, Number(overlay.radius || 0))}px`;
   node.style.borderWidth = overlay.borderWidth ? `${Math.max(0, Number(overlay.borderWidth || 0))}px` : "";
   node.style.borderColor = overlay.borderWidth ? (overlay.borderColor || "rgba(255, 255, 255, 0.28)") : "";
-  node.style.boxShadow = overlay.shadow ? "0 14px 34px rgba(0, 0, 0, 0.45)" : "";
+  node.style.boxShadow = "";
   const viewport = node.querySelector(".overlay-viewport");
-  if (viewport) viewport.style.filter = filterValue(overlay.filter);
+  if (viewport) viewport.style.filter = "";
   node.classList.toggle("hidden", overlay.visible === false);
   node.classList.toggle("locked", overlay.locked === true);
   applyMediaTransform(node, overlay);
@@ -179,18 +161,6 @@ function syncMediaElement(node, overlay) {
   if (!media) return;
 
   media.className = `overlay-media ${overlay.fit || "fill"}`;
-
-  if (media.tagName === "IMG") {
-    media.alt = overlay.name || "Overlay";
-  }
-
-  if (media.tagName === "VIDEO") {
-    media.autoplay = overlay.autoplay !== false;
-    media.loop = overlay.loop !== false;
-    media.muted = overlay.muted !== false;
-    media.playsInline = true;
-    media.controls = false;
-  }
 }
 
 function hashString(value) {
@@ -207,56 +177,4 @@ function sourceBox(overlay) {
     width: Math.max(1, Number(overlay.sourceWidth || overlay.width || 1)),
     height: Math.max(1, Number(overlay.sourceHeight || overlay.height || 1)),
   };
-}
-
-function filterValue(filter) {
-  const filters = {
-    grayscale: "grayscale(1)",
-    sepia: "sepia(1)",
-    blur: "blur(3px)",
-    contrast: "contrast(1.35)",
-  };
-  return filters[filter] || "";
-}
-
-function setMediaSource(element, overlay) {
-  if (!String(overlay.src || "").startsWith("omdb://")) {
-    element.src = overlay.src || "";
-    return;
-  }
-
-  element.dataset.pendingSrc = overlay.src;
-  resolveStoredMedia(overlay.src).then((url) => {
-    if (url && element.dataset.pendingSrc === overlay.src) element.src = url;
-  });
-}
-
-function resolveStoredMedia(source) {
-  return new Promise((resolve) => {
-    if (!("indexedDB" in window)) {
-      resolve("");
-      return;
-    }
-
-    const request = indexedDB.open("overlay_manager_media", 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("files");
-    };
-    request.onerror = () => resolve("");
-    request.onsuccess = () => {
-      const db = request.result;
-      const id = source.replace("omdb://", "");
-      const tx = db.transaction("files", "readonly");
-      const get = tx.objectStore("files").get(id);
-      get.onerror = () => resolve("");
-      get.onsuccess = () => {
-        const record = get.result;
-        if (!record?.blob) {
-          resolve("");
-          return;
-        }
-        resolve(URL.createObjectURL(record.blob));
-      };
-    };
-  });
 }

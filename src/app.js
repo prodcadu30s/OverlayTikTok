@@ -1,4 +1,4 @@
-import { ASSET_TYPES, LAYOUTS, LAYOUT_TEMPLATES } from "./constants.js";
+import { LAYOUTS, LAYOUT_TEMPLATES, MAX_SOURCE_SIZE } from "./constants.js";
 import {
   applyRect,
   clampRect,
@@ -14,10 +14,8 @@ import {
   clamp,
   clone,
   downloadJson,
-  inferAssetType,
   isTypingTarget,
   niceType,
-  readDataUrl,
   readTextFile,
   rootUrl,
   slugify,
@@ -27,7 +25,8 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260508-crop-source-expand";
+const RUNTIME_BUILD = "20260509-runtime-lite";
+const MIN_CROP_SCALE = 0.05;
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
   const layout = query.get("layout") === "vertical" || query.get("layout") === "portrait" ? "vertical" : "horizontal";
@@ -60,7 +59,6 @@ const els = {
   exportBtn: document.querySelector("#exportBtn"),
   importBtn: document.querySelector("#importBtn"),
   importInput: document.querySelector("#importInput"),
-  overlayFileInput: document.querySelector("#overlayFileInput"),
 };
 
 let state = normalizeState(loadProject());
@@ -71,7 +69,6 @@ let saveTimer = null;
 let liveFieldEditing = false;
 let dragLayerId = null;
 let layerFilter = "";
-let pendingReplaceOverlayId = null;
 const undoStack = [];
 const redoStack = [];
 
@@ -347,28 +344,17 @@ function renderScenesPanel(content) {
 }
 
 function renderLayersPanel(content) {
-  const type = selectInput(ASSET_TYPES.map((item) => [item, niceType(item)]), "iframe");
   const name = textInput("Nome da layer");
   const src = textInput("URL ou caminho");
   const grid = document.createElement("div");
   grid.className = "form-grid";
-  grid.append(fieldWrap("Tipo", type), fieldWrap("Nome", name));
+  grid.append(fieldWrap("Nome", name));
 
   const addButtons = document.createElement("div");
   addButtons.className = "button-row";
   addButtons.append(
-    actionButton("Adicionar", () => addOverlayFromForm({ type, name, src }), "primary"),
-    actionButton("Arquivo", chooseOverlayFiles),
-    actionButton("Iframe", () => {
-      type.value = "iframe";
-      src.focus();
-    }),
+    actionButton("Adicionar iframe", () => addOverlayFromForm({ name, src }), "primary"),
   );
-
-  const dropZone = document.createElement("div");
-  dropZone.className = "drop-zone";
-  dropZone.textContent = "Solte arquivos aqui para adicionar na cena";
-  attachFileDrop(dropZone, (files) => importOverlayFiles(files));
 
   const template = selectInput([["", "Templates"], ...LAYOUT_TEMPLATES.map((item) => [item.id, item.name])], "");
   template.addEventListener("change", () => {
@@ -423,7 +409,6 @@ function renderLayersPanel(content) {
     const actions = document.createElement("div");
     actions.className = "row-actions";
     actions.append(
-      miniIconButton("upload", "Trocar midia", (event) => layerAction(event, () => chooseReplacementFile(overlay.id))),
       miniIconButton("copy", "Copiar para outro layout", (event) => layerAction(event, () => copyLayerToOtherLayout(overlay.id))),
       miniIconButton(
         overlay.visible ? "eye" : "eyeOff",
@@ -450,7 +435,7 @@ function renderLayersPanel(content) {
     actionButton("Duplicar", () => duplicateSelected()),
     actionButton("Excluir", () => deleteSelected(), "danger"),
   );
-  content.append(grid, fieldWrap("Source", src), addButtons, dropZone, fieldWrap("Template", template), fieldWrap("Filtro", filter), list, layerButtons);
+  content.append(grid, fieldWrap("Source", src), addButtons, fieldWrap("Template", template), fieldWrap("Filtro", filter), list, layerButtons);
 }
 
 function updateLayerFilterVisibility() {
@@ -468,23 +453,7 @@ function layerAction(event, fn) {
 function createLayerThumbnail(overlay) {
   const thumb = document.createElement("div");
   thumb.className = `layer-thumb ${overlay.visible === false ? "muted" : ""}`.trim();
-
-  if ((overlay.type === "image" || overlay.type === "gif") && overlay.src) {
-    const image = document.createElement("img");
-    image.alt = "";
-    image.src = overlay.src.startsWith("omdb://") ? "" : overlay.src;
-    if (overlay.src.startsWith("omdb://")) {
-      resolveStoredMedia(overlay.src).then((url) => {
-        if (url) image.src = url;
-      });
-    }
-    thumb.appendChild(image);
-  } else if ((overlay.type === "video" || overlay.type === "webm") && overlay.src) {
-    thumb.textContent = "VID";
-  } else {
-    thumb.textContent = overlay.type === "iframe" ? "IFR" : niceType(overlay.type).slice(0, 3).toUpperCase();
-  }
-
+  thumb.textContent = "IFR";
   return thumb;
 }
 
@@ -496,12 +465,6 @@ function renameOverlayInline(overlayId) {
   mutate(() => {
     overlay.name = name.trim() || overlay.name;
   }, "Layer renomeada");
-}
-
-function chooseReplacementFile(overlayId) {
-  pendingReplaceOverlayId = overlayId;
-  els.overlayFileInput.multiple = false;
-  els.overlayFileInput.click();
 }
 
 function copyLayerToOtherLayout(overlayId) {
@@ -669,14 +632,6 @@ function renderInspectorPanel(content) {
   content.append(fieldWrap("Nome", dataTextInput("name", overlay.name)));
   content.append(fieldWrap("Source", dataTextInput("src", overlay.src)));
 
-  const typeFit = document.createElement("div");
-  typeFit.className = "form-grid";
-  typeFit.append(
-    fieldWrap("Tipo", dataSelect("type", ASSET_TYPES.map((item) => [item, niceType(item)]), overlay.type)),
-    fieldWrap("Fit", dataSelect("fit", [["fill", "Fill"], ["contain", "Contain"], ["cover", "Cover"]], overlay.fit)),
-  );
-  content.append(typeFit);
-
   const geometry = document.createElement("div");
   geometry.className = "form-grid four";
   geometry.append(
@@ -686,14 +641,6 @@ function renderInspectorPanel(content) {
     fieldWrap("H", dataNumberInput("height", overlay.height)),
   );
   content.append(geometry);
-
-  const sourceSize = document.createElement("div");
-  sourceSize.className = "form-grid";
-  sourceSize.append(
-    fieldWrap("Fonte W", dataNumberInput("sourceWidth", overlay.sourceWidth)),
-    fieldWrap("Fonte H", dataNumberInput("sourceHeight", overlay.sourceHeight)),
-  );
-  content.append(sourceSize);
 
   const layer = document.createElement("div");
   layer.className = "form-grid";
@@ -713,14 +660,6 @@ function renderInspectorPanel(content) {
   );
   content.append(style);
 
-  const filterGroup = document.createElement("div");
-  filterGroup.className = "form-grid";
-  filterGroup.append(
-    fieldWrap("Filtro", dataSelect("filter", [["none", "Nenhum"], ["grayscale", "P&B"], ["sepia", "Sepia"], ["blur", "Blur"], ["contrast", "Contraste"]], overlay.filter)),
-    fieldWrap("Grupo", dataTextInput("group", overlay.group)),
-  );
-  content.append(filterGroup);
-
   const crop = document.createElement("div");
   crop.className = "form-grid four";
   crop.append(
@@ -734,10 +673,6 @@ function renderInspectorPanel(content) {
   content.append(
     checkWrap("Visivel", dataCheckbox("visible", overlay.visible)),
     checkWrap("Travada", dataCheckbox("locked", overlay.locked)),
-    checkWrap("Muted", dataCheckbox("muted", overlay.muted)),
-    checkWrap("Loop", dataCheckbox("loop", overlay.loop)),
-    checkWrap("Autoplay", dataCheckbox("autoplay", overlay.autoplay)),
-    checkWrap("Sombra", dataCheckbox("shadow", overlay.shadow)),
     checkWrap("Proporcao", dataCheckbox("keepAspect", overlay.keepAspect)),
   );
 
@@ -764,7 +699,6 @@ function renderInspectorPanel(content) {
   const buttons = document.createElement("div");
   buttons.className = "button-row";
   buttons.append(
-    actionButton("Trocar midia", () => chooseReplacementFile(overlay.id)),
     actionButton("Outro layout", () => copyLayerToOtherLayout(overlay.id)),
   );
   content.appendChild(buttons);
@@ -804,18 +738,7 @@ function renderPropertiesPanel(content) {
         state.editor.showGrid = value;
       }, "Grid salvo");
     })),
-    checkWrap("Performance", propertiesCheckbox(state.editor.performanceMode, (value) => {
-      mutate(() => {
-        state.editor.performanceMode = value;
-      }, "Performance salva");
-    })),
   );
-
-  const runtimeH = textInput("", runtimeUrl("horizontal"));
-  runtimeH.readOnly = true;
-  const runtimeV = textInput("", runtimeUrl("vertical"));
-  runtimeV.readOnly = true;
-  content.append(fieldWrap("Runtime H", runtimeH), fieldWrap("Runtime V", runtimeV));
 
   const runtimeButtons = document.createElement("div");
   runtimeButtons.className = "button-row";
@@ -841,7 +764,9 @@ function renderPropertiesPanel(content) {
 }
 
 function renderStage() {
-  const overlays = [...currentOverlays()].sort((a, b) => a.z - b.z);
+  const overlays = [...currentOverlays()]
+    .filter((overlay) => overlay.visible !== false)
+    .sort((a, b) => a.z - b.z);
   const existingNodes = new Map(
     Array.from(els.stageObjects.querySelectorAll(".overlay-node")).map((node) => [node.dataset.id, node]),
   );
@@ -1095,12 +1020,12 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   const preset = presetFor(state.layout);
   const minOutput = 12;
   const minVisible = 5;
-  let sourceWidth = Math.max(minVisible, Number(overlay.sourceWidth || startRect.width || minVisible));
-  let sourceHeight = Math.max(minVisible, Number(overlay.sourceHeight || startRect.height || minVisible));
+  let sourceWidth = safeSourceSize(overlay.sourceWidth, startRect.width, minVisible);
+  let sourceHeight = safeSourceSize(overlay.sourceHeight, startRect.height, minVisible);
   const visibleWidth = Math.max(minVisible, sourceWidth - startCrop.left - startCrop.right);
   const visibleHeight = Math.max(minVisible, sourceHeight - startCrop.top - startCrop.bottom);
-  const scaleX = Math.max(0.001, startRect.width / visibleWidth);
-  const scaleY = Math.max(0.001, startRect.height / visibleHeight);
+  const scaleX = Math.max(MIN_CROP_SCALE, startRect.width / visibleWidth);
+  const scaleY = Math.max(MIN_CROP_SCALE, startRect.height / visibleHeight);
   const crop = { ...startCrop };
   const rect = { ...startRect };
 
@@ -1116,7 +1041,7 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
     const edgeDelta = clamp(dx, minOutput - startRect.width, preset.width - (startRect.x + startRect.width));
     const desiredRight = startCrop.right - edgeDelta / scaleX;
     if (desiredRight < 0) {
-      sourceWidth += Math.abs(desiredRight);
+      sourceWidth = Math.min(MAX_SOURCE_SIZE, sourceWidth + Math.abs(desiredRight));
       crop.right = 0;
     } else {
       crop.right = Math.round(desiredRight);
@@ -1136,7 +1061,7 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
     const edgeDelta = clamp(dy, minOutput - startRect.height, preset.height - (startRect.y + startRect.height));
     const desiredBottom = startCrop.bottom - edgeDelta / scaleY;
     if (desiredBottom < 0) {
-      sourceHeight += Math.abs(desiredBottom);
+      sourceHeight = Math.min(MAX_SOURCE_SIZE, sourceHeight + Math.abs(desiredBottom));
       crop.bottom = 0;
     } else {
       crop.bottom = Math.round(desiredBottom);
@@ -1158,20 +1083,20 @@ function cropFrameFromHandle(overlay, startRect, startCrop, dir, dx, dy) {
   return {
     crop: finalCrop,
     rect: clampRect(rect, state.layout, minOutput),
-    sourceWidth: Math.round(sourceWidth),
-    sourceHeight: Math.round(sourceHeight),
+    sourceWidth: safeSourceSize(sourceWidth, startRect.width, minVisible),
+    sourceHeight: safeSourceSize(sourceHeight, startRect.height, minVisible),
   };
 }
 
 function applyCropFieldValue(overlay, side, nextValue) {
   const startRect = rectFromOverlay(overlay);
   const startCrop = clone(overlay.crop);
-  const sourceWidth = Math.max(5, Number(overlay.sourceWidth || startRect.width || 5));
-  const sourceHeight = Math.max(5, Number(overlay.sourceHeight || startRect.height || 5));
+  const sourceWidth = safeSourceSize(overlay.sourceWidth, startRect.width, 5);
+  const sourceHeight = safeSourceSize(overlay.sourceHeight, startRect.height, 5);
   const visibleWidth = Math.max(5, sourceWidth - startCrop.left - startCrop.right);
   const visibleHeight = Math.max(5, sourceHeight - startCrop.top - startCrop.bottom);
-  const scaleX = Math.max(0.001, startRect.width / visibleWidth);
-  const scaleY = Math.max(0.001, startRect.height / visibleHeight);
+  const scaleX = Math.max(MIN_CROP_SCALE, startRect.width / visibleWidth);
+  const scaleY = Math.max(MIN_CROP_SCALE, startRect.height / visibleHeight);
   let dir = "";
   let dx = 0;
   let dy = 0;
@@ -1204,8 +1129,10 @@ function applyCropFieldValue(overlay, side, nextValue) {
 
 function clampOverlayCrop(overlay) {
   const minVisible = 5;
-  const sourceWidth = Math.max(minVisible, overlay.sourceWidth || overlay.width || minVisible);
-  const sourceHeight = Math.max(minVisible, overlay.sourceHeight || overlay.height || minVisible);
+  overlay.sourceWidth = safeSourceSize(overlay.sourceWidth, overlay.width, minVisible);
+  overlay.sourceHeight = safeSourceSize(overlay.sourceHeight, overlay.height, minVisible);
+  const sourceWidth = overlay.sourceWidth;
+  const sourceHeight = overlay.sourceHeight;
 
   overlay.crop.left = clamp(toInt(overlay.crop.left, 0), 0, sourceWidth - minVisible);
   overlay.crop.right = clamp(toInt(overlay.crop.right, 0), 0, sourceWidth - minVisible);
@@ -1218,6 +1145,15 @@ function clampOverlayCrop(overlay) {
   if (overlay.crop.top + overlay.crop.bottom > sourceHeight - minVisible) {
     overlay.crop.bottom = Math.max(0, sourceHeight - minVisible - overlay.crop.top);
   }
+}
+
+function safeSourceSize(value, fallback, minimum = 5) {
+  const raw = toInt(value, fallback);
+  const fallbackSize = toInt(fallback, minimum);
+  if (raw > MAX_SOURCE_SIZE) {
+    return Math.round(clamp(Math.max(fallbackSize, minimum), minimum, MAX_SOURCE_SIZE));
+  }
+  return Math.round(clamp(raw, minimum, MAX_SOURCE_SIZE));
 }
 
 function setFieldValue(field, value) {
@@ -1238,28 +1174,28 @@ function onInspectorInput(event) {
 
   if (field === "name") overlay.name = String(value);
   if (field === "src") overlay.src = String(value);
-  if (field === "type") overlay.type = String(value);
-  if (field === "fit") overlay.fit = String(value);
+  if (field === "type") overlay.type = "iframe";
+  if (field === "fit") overlay.fit = "fill";
   if (field === "x") overlay.x = clamp(toInt(value, overlay.x), 0, preset.width - overlay.width);
   if (field === "y") overlay.y = clamp(toInt(value, overlay.y), 0, preset.height - overlay.height);
   if (field === "width") overlay.width = clamp(toInt(value, overlay.width), 24, preset.width - overlay.x);
   if (field === "height") overlay.height = clamp(toInt(value, overlay.height), 24, preset.height - overlay.y);
-  if (field === "sourceWidth") overlay.sourceWidth = clamp(toInt(value, overlay.sourceWidth), 24, 10000);
-  if (field === "sourceHeight") overlay.sourceHeight = clamp(toInt(value, overlay.sourceHeight), 24, 10000);
+  if (field === "sourceWidth") overlay.sourceWidth = clamp(toInt(value, overlay.sourceWidth), 24, MAX_SOURCE_SIZE);
+  if (field === "sourceHeight") overlay.sourceHeight = clamp(toInt(value, overlay.sourceHeight), 24, MAX_SOURCE_SIZE);
   if (field === "z") overlay.z = toInt(value, overlay.z);
   if (field === "opacity") overlay.opacity = clamp(toNumber(value, overlay.opacity), 0, 1);
   if (field === "rotation") overlay.rotation = clamp(toNumber(value, overlay.rotation), -360, 360);
   if (field === "radius") overlay.radius = clamp(toInt(value, overlay.radius), 0, 500);
   if (field === "borderWidth") overlay.borderWidth = clamp(toInt(value, overlay.borderWidth), 0, 80);
   if (field === "borderColor") overlay.borderColor = String(value || "#ffffff");
-  if (field === "filter") overlay.filter = String(value);
-  if (field === "group") overlay.group = String(value);
+  if (field === "filter") overlay.filter = "none";
+  if (field === "group") overlay.group = "";
   if (field === "visible") overlay.visible = Boolean(value);
   if (field === "locked") overlay.locked = Boolean(value);
-  if (field === "muted") overlay.muted = Boolean(value);
-  if (field === "loop") overlay.loop = Boolean(value);
-  if (field === "autoplay") overlay.autoplay = Boolean(value);
-  if (field === "shadow") overlay.shadow = Boolean(value);
+  if (field === "muted") overlay.muted = true;
+  if (field === "loop") overlay.loop = false;
+  if (field === "autoplay") overlay.autoplay = false;
+  if (field === "shadow") overlay.shadow = false;
   if (field === "keepAspect") overlay.keepAspect = Boolean(value);
   if (cropField) {
     const side = field.split(".")[1];
@@ -1270,7 +1206,7 @@ function onInspectorInput(event) {
     updateInspectorGeometry(overlay);
   }
 
-  const fullRenderFields = new Set(["name", "src", "type", "fit", "visible", "locked", "muted", "loop", "autoplay", "group", "keepAspect"]);
+  const fullRenderFields = new Set(["name", "src", "visible", "locked", "keepAspect"]);
   if (fullRenderFields.has(field)) {
     renderStage();
   } else if (cropField) {
@@ -1377,10 +1313,6 @@ function duplicateScene(sceneId) {
   }, "Cena duplicada");
 }
 
-function chooseOverlayFiles() {
-  els.overlayFileInput.click();
-}
-
 function addOverlayFromForm(fields) {
   const src = fields.src.value.trim();
   if (!src) {
@@ -1391,219 +1323,11 @@ function addOverlayFromForm(fields) {
 
   mutate(() => {
     addOverlayToScene({
-      name: fields.name.value.trim() || niceType(fields.type.value),
-      type: fields.type.value,
+      name: fields.name.value.trim() || "Iframe",
+      type: "iframe",
       src,
     });
   }, "Layer adicionada");
-}
-
-async function createOverlayInputsFromFiles(files) {
-  const inputs = [];
-  for (const file of files) {
-    const src = await storeMediaFile(file);
-    const dimensions = await readMediaDimensions(file);
-    inputs.push({
-      name: file.name,
-      type: inferAssetType(file.name, file.type?.startsWith("video/") ? "video" : "image"),
-      src,
-      sourceWidth: dimensions?.width,
-      sourceHeight: dimensions?.height,
-    });
-  }
-  return inputs;
-}
-
-function readMediaDimensions(file) {
-  return new Promise((resolve) => {
-    if (!file?.type?.startsWith("image/") && !file?.type?.startsWith("video/")) {
-      resolve(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(file);
-    const done = (dimensions = null) => {
-      URL.revokeObjectURL(url);
-      resolve(dimensions);
-    };
-
-    if (file.type.startsWith("image/")) {
-      const image = new Image();
-      image.onload = () => done({ width: image.naturalWidth, height: image.naturalHeight });
-      image.onerror = () => done();
-      image.src = url;
-      return;
-    }
-
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.onloadedmetadata = () => done({ width: video.videoWidth, height: video.videoHeight });
-    video.onerror = () => done();
-    video.src = url;
-  });
-}
-
-function openMediaDb() {
-  return new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) {
-      reject(new Error("IndexedDB indisponivel"));
-      return;
-    }
-
-    const request = indexedDB.open("overlay_manager_media", 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("files");
-    };
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
-}
-
-async function storeMediaFile(file) {
-  try {
-    const db = await openMediaDb();
-    const id = uid("media");
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction("files", "readwrite");
-      tx.objectStore("files").put({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        blob: file,
-        createdAt: Date.now(),
-      }, id);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-
-    if (file.size > 8 * 1024 * 1024) showToast("Arquivo salvo no IndexedDB");
-    return `omdb://${id}`;
-  } catch (error) {
-    console.warn("IndexedDB failed, falling back to data URL", error);
-    if (file.size > 6 * 1024 * 1024) showToast("Arquivo grande salvo no projeto");
-    return readDataUrl(file);
-  }
-}
-
-function resolveStoredMedia(source) {
-  return new Promise((resolve) => {
-    if (!String(source || "").startsWith("omdb://")) {
-      resolve(source || "");
-      return;
-    }
-
-    openMediaDb().then((db) => {
-      const tx = db.transaction("files", "readonly");
-      const get = tx.objectStore("files").get(source.replace("omdb://", ""));
-      get.onerror = () => resolve("");
-      get.onsuccess = () => {
-        const record = get.result;
-        resolve(record?.blob ? URL.createObjectURL(record.blob) : "");
-      };
-    }).catch(() => resolve(""));
-  });
-}
-
-async function importOverlayFiles(files, options = {}) {
-  const maxFileSize = 180 * 1024 * 1024;
-  const fileList = Array.from(files || []).filter(Boolean).filter((file) => {
-    if (file.size <= maxFileSize) return true;
-    setStatus(`Arquivo muito grande: ${file.name}`);
-    return false;
-  });
-  if (!fileList.length) return [];
-
-  try {
-    const inputs = await createOverlayInputsFromFiles(fileList);
-    mutate(() => {
-      inputs.forEach((input, index) => {
-        addOverlayToScene(input, offsetDropPosition(options.position, index));
-      });
-    }, inputs.length > 1 ? "Layers adicionadas" : "Layer adicionada");
-    return inputs;
-  } catch (error) {
-    console.error(error);
-    setStatus("Erro ao adicionar layer");
-    return [];
-  }
-}
-
-async function replaceOverlayFile(overlayId, file) {
-  if (!file) return;
-  if (file.size > 180 * 1024 * 1024) {
-    setStatus(`Arquivo muito grande: ${file.name}`);
-    return;
-  }
-  try {
-    const [input] = await createOverlayInputsFromFiles([file]);
-    mutate(() => {
-      const overlay = currentOverlays().find((item) => item.id === overlayId);
-      if (!overlay) return;
-      overlay.name = input.name || overlay.name;
-      overlay.type = input.type;
-      overlay.src = input.src;
-      overlay.sourceWidth = input.sourceWidth || overlay.width;
-      overlay.sourceHeight = input.sourceHeight || overlay.height;
-      overlay.crop = { top: 0, right: 0, bottom: 0, left: 0 };
-    }, "Midia trocada");
-  } catch (error) {
-    console.error(error);
-    setStatus("Erro ao trocar midia");
-  }
-}
-
-function offsetDropPosition(position, index) {
-  if (!position) return null;
-  return {
-    x: position.x + index * 28,
-    y: position.y + index * 28,
-  };
-}
-
-function attachFileDrop(target, onFiles) {
-  target.addEventListener("dragenter", (event) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    target.classList.add("drop-active");
-  });
-
-  target.addEventListener("dragover", (event) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-    target.classList.add("drop-active");
-  });
-
-  target.addEventListener("dragleave", (event) => {
-    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
-    target.classList.remove("drop-active");
-  });
-
-  target.addEventListener("drop", (event) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    target.classList.remove("drop-active");
-    const files = filesFromDataTransfer(event.dataTransfer);
-    if (files.length) onFiles(files);
-  });
-}
-
-function filesFromDataTransfer(dataTransfer) {
-  return Array.from(dataTransfer?.files || []).filter((file) => {
-    if (file.type?.startsWith("image/") || file.type?.startsWith("video/")) return true;
-    return /\.(gif|webm|png|jpe?g|avif|webp|bmp|svg|mp4|mov|m4v|ogg|ogv)$/i.test(file.name);
-  });
-}
-
-function isFileDrag(event) {
-  return dataTransferTypes(event).includes("Files");
-}
-
-function dataTransferTypes(event) {
-  return Array.from(event.dataTransfer?.types || []);
 }
 
 function addOverlayToScene(input, position = null) {
@@ -1784,7 +1508,7 @@ async function copyRuntimeUrl(layout = state.layout) {
 }
 
 async function createRuntimePayload(layout) {
-  const project = await hydrateProjectForExport(normalizeState(state));
+  const project = normalizeState(state);
   const scene = project.scenes.find((item) => item.id === project.currentSceneId) || project.scenes[0];
   const runtimeScene = {
     ...scene,
@@ -1821,34 +1545,9 @@ function bytesToBase64Url(bytes) {
 }
 
 async function exportProject() {
-  const payload = await hydrateProjectForExport(normalizeState(state));
+  const payload = normalizeState(state);
   downloadJson("overlay-manager-project.json", payload);
   setStatus("JSON exportado");
-}
-
-async function hydrateProjectForExport(project) {
-  const copy = clone(project);
-  for (const scene of copy.scenes) {
-    for (const layout of Object.keys(scene.overlays || {})) {
-      for (const overlay of scene.overlays[layout]) {
-        if (!String(overlay.src || "").startsWith("omdb://")) continue;
-        const blob = await getStoredMediaBlob(overlay.src);
-        if (blob) overlay.src = await readDataUrl(blob);
-      }
-    }
-  }
-  return copy;
-}
-
-function getStoredMediaBlob(source) {
-  return new Promise((resolve) => {
-    openMediaDb().then((db) => {
-      const tx = db.transaction("files", "readonly");
-      const get = tx.objectStore("files").get(source.replace("omdb://", ""));
-      get.onerror = () => resolve(null);
-      get.onsuccess = () => resolve(get.result?.blob || null);
-    }).catch(() => resolve(null));
-  });
 }
 
 async function importProject(file) {
@@ -1856,7 +1555,6 @@ async function importProject(file) {
   try {
     const text = await readTextFile(file);
     const next = normalizeState(JSON.parse(text));
-    await migrateProjectMediaToIndexedDb(next);
     pushHistory();
     state = next;
     selectedId = null;
@@ -1867,24 +1565,6 @@ async function importProject(file) {
     setStatus("JSON invalido");
   } finally {
     els.importInput.value = "";
-  }
-}
-
-async function migrateProjectMediaToIndexedDb(project) {
-  const minDataUrlLength = 900000;
-  for (const scene of project.scenes) {
-    for (const layout of Object.keys(scene.overlays || {})) {
-      for (const overlay of scene.overlays[layout]) {
-        if (!String(overlay.src || "").startsWith("data:") || overlay.src.length < minDataUrlLength) continue;
-        try {
-          const response = await fetch(overlay.src);
-          const blob = await response.blob();
-          overlay.src = await storeMediaFile(new File([blob], overlay.name || "media", { type: blob.type }));
-        } catch (error) {
-          console.warn("Could not migrate imported media", error);
-        }
-      }
-    }
   }
 }
 
@@ -1913,48 +1593,6 @@ function onEditorWheel(event) {
   event.stopPropagation();
   if (event.deltaY === 0) return;
   zoomBy(event.deltaY > 0 ? -0.08 : 0.08);
-}
-
-function onStageDragOver(event) {
-  const types = dataTransferTypes(event);
-  if (!types.includes("Files")) return;
-
-  event.preventDefault();
-  event.dataTransfer.dropEffect = "copy";
-  els.stage.classList.add("drop-target");
-}
-
-function onStageDragLeave(event) {
-  if (event.relatedTarget && els.stage.contains(event.relatedTarget)) return;
-  els.stage.classList.remove("drop-target");
-}
-
-function onStageDrop(event) {
-  const types = dataTransferTypes(event);
-  if (!types.includes("Files")) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-  els.stage.classList.remove("drop-target");
-
-  const position = stagePointFromClient(event);
-  const files = filesFromDataTransfer(event.dataTransfer);
-  if (files.length) importOverlayFiles(files, { position });
-}
-
-function stagePointFromClient(event) {
-  const rect = els.stage.getBoundingClientRect();
-  const preset = presetFor(state.layout);
-  return {
-    x: clamp(Math.round((event.clientX - rect.left) * (preset.width / Math.max(rect.width, 1))), 0, preset.width),
-    y: clamp(Math.round((event.clientY - rect.top) * (preset.height / Math.max(rect.height, 1))), 0, preset.height),
-  };
-}
-
-function preventUnhandledDragDrop(event) {
-  const types = dataTransferTypes(event);
-  if (!types.includes("Files")) return;
-  event.preventDefault();
 }
 
 function actionButton(text, onClick, className = "") {
@@ -2095,21 +1733,6 @@ els.saveBtn.addEventListener("click", () => persist("Salvo"));
 els.exportBtn.addEventListener("click", exportProject);
 els.importBtn.addEventListener("click", () => els.importInput.click());
 els.importInput.addEventListener("change", () => importProject(els.importInput.files?.[0]));
-els.overlayFileInput.addEventListener("change", () => {
-  if (pendingReplaceOverlayId) {
-    replaceOverlayFile(pendingReplaceOverlayId, els.overlayFileInput.files?.[0]);
-  } else {
-    importOverlayFiles(els.overlayFileInput.files);
-  }
-  pendingReplaceOverlayId = null;
-  els.overlayFileInput.multiple = true;
-  els.overlayFileInput.value = "";
-});
-els.stage.addEventListener("dragover", onStageDragOver);
-els.stage.addEventListener("dragleave", onStageDragLeave);
-els.stage.addEventListener("drop", onStageDrop);
-window.addEventListener("dragover", preventUnhandledDragDrop);
-window.addEventListener("drop", preventUnhandledDragDrop);
 window.addEventListener("wheel", onEditorWheel, { passive: false });
 
 window.addEventListener("resize", () => {

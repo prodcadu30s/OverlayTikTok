@@ -5,10 +5,11 @@ import { loadProject, normalizeState } from "./state.js";
 
 const stage = document.querySelector("#runtimeStage");
 const layout = document.body.dataset.layout === "vertical" ? "vertical" : "horizontal";
+const params = new URLSearchParams(location.search);
 let embeddedState = null;
 let state = normalizeState(loadProject());
 let lastStorageSnapshot = localStorage.getItem(STORAGE_KEY) || "";
-let liveStorage = true;
+let liveStorage = params.get("live") === "1";
 let runtimeLoadFailed = false;
 
 function activeScene() {
@@ -23,11 +24,19 @@ function overlaysForRuntime() {
 }
 
 function applyRuntimeSize() {
+  if (!stage) return;
   const preset = presetFor(layout);
-  const scale = Math.min(window.innerWidth / preset.width, window.innerHeight / preset.height);
+  const viewportWidth = Math.max(1, window.innerWidth);
+  const viewportHeight = Math.max(1, window.innerHeight);
+  let scale = Math.min(viewportWidth / preset.width, viewportHeight / preset.height);
+  if (Math.abs(scale - 1) < 0.01) scale = 1;
+  const scaledWidth = Math.round(preset.width * scale);
+  const scaledHeight = Math.round(preset.height * scale);
   stage.style.width = `${preset.width}px`;
   stage.style.height = `${preset.height}px`;
-  stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  stage.style.left = `${Math.round((viewportWidth - scaledWidth) / 2)}px`;
+  stage.style.top = `${Math.round((viewportHeight - scaledHeight) / 2)}px`;
+  stage.style.transform = scale === 1 ? "none" : `scale(${scale})`;
 }
 
 function render() {
@@ -118,9 +127,6 @@ function base64UrlToBytes(value) {
 }
 
 window.addEventListener("resize", applyRuntimeSize);
-window.addEventListener("storage", (event) => {
-  if (event.key === STORAGE_KEY) reloadAndRender();
-});
 
 async function boot() {
   embeddedState = await loadEmbeddedProject();
@@ -134,7 +140,12 @@ async function boot() {
     liveStorage = false;
   }
 
-  if (liveStorage) window.setInterval(reloadAndRender, 1000);
+  if (liveStorage) {
+    window.addEventListener("storage", (event) => {
+      if (event.key === STORAGE_KEY) reloadAndRender();
+    });
+    window.setInterval(reloadAndRender, 5000);
+  }
   render();
 }
 

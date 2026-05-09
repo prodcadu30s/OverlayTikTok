@@ -902,11 +902,12 @@ input[type="checkbox"] {
 
 .runtime-stage {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   overflow: hidden;
-  transform-origin: center center;
+  transform-origin: 0 0;
   background: transparent;
+  contain: layout paint style;
 }
 
 .runtime-stage .overlay-node {
