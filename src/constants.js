@@ -2,7 +2,6 @@ export const STORAGE_KEY = "overlay_manager_v2";
 export const LEGACY_STORAGE_KEY = "overlay_manager_v1";
 export const CURRENT_VERSION = 2;
 export const MAX_SOURCE_SIZE = 4096;
-export const MAX_ASSETS = 80;
 
 export const LAYOUTS = {
   horizontal: { id: "horizontal", label: "1920x1080", width: 1920, height: 1080 },
@@ -48,22 +47,21 @@ export const LAYOUT_TEMPLATES = [
     ],
   },
   {
-    id: "webcam-source",
-    name: "Webcam + fonte externa",
+    id: "webcam-alerts",
+    name: "Webcam + alertas",
     layout: "vertical",
     overlays: [
-      { name: "Fonte externa", type: "iframe", src: "about:blank", x: 90, y: 680, width: 900, height: 230, z: 10, radius: 16 },
-      { name: "URL externa", type: "iframe", src: "about:blank", x: 90, y: 960, width: 900, height: 740, z: 20, radius: 16 },
+      { name: "Alertas", type: "iframe", src: "about:blank", x: 90, y: 680, width: 900, height: 230, z: 10, radius: 16 },
+      { name: "Chat", type: "iframe", src: "about:blank", x: 90, y: 960, width: 900, height: 740, z: 20, radius: 16 },
     ],
   },
 ];
 
 export const PANEL_DEFAULTS = {
   scenes: { title: "Scenes", open: true, dock: "left" },
-  assets: { title: "Assets", open: true, dock: "left" },
   layers: { title: "Layers", open: true, dock: "right" },
-  inspector: { title: "Properties", open: true, dock: "right" },
-  properties: { title: "Canvas", open: true, dock: "right" },
+  inspector: { title: "Inspector", open: true, dock: "right" },
+  properties: { title: "Properties", open: true, dock: "right" },
 };
 
 export const DEFAULT_EDITOR = {

@@ -3,7 +3,6 @@ import {
   DEFAULT_EDITOR,
   DEFAULT_SCENES,
   LEGACY_STORAGE_KEY,
-  MAX_ASSETS,
   MAX_SOURCE_SIZE,
   STORAGE_KEY,
 } from "./constants.js";
@@ -15,7 +14,6 @@ export function createDefaultState() {
     layout: "horizontal",
     currentSceneId: DEFAULT_SCENES[0].id,
     editor: clone(DEFAULT_EDITOR),
-    assets: [],
     scenes: DEFAULT_SCENES.map((scene) => ({
       id: scene.id,
       name: scene.name,
@@ -70,7 +68,6 @@ export function normalizeState(input) {
   base.layout = input.layout === "vertical" || input.layout === "portrait" ? "vertical" : "horizontal";
   base.currentSceneId = typeof input.currentSceneId === "string" ? input.currentSceneId : base.currentSceneId;
   base.editor = normalizeEditor(input.editor);
-  base.assets = normalizeAssets(input.assets);
   const usedSceneIds = new Set();
   const scenes = [];
   const inputScenes = Array.isArray(input.scenes) ? input.scenes : [];
@@ -92,44 +89,6 @@ export function normalizeState(input) {
   }
 
   return base;
-}
-
-function normalizeAssets(assets) {
-  if (!Array.isArray(assets)) return [];
-  const usedIds = new Set();
-  return assets
-    .map((asset) => normalizeAsset(asset, usedIds))
-    .filter(Boolean)
-    .slice(0, MAX_ASSETS);
-}
-
-function normalizeAsset(input, usedIds) {
-  if (!input || typeof input !== "object") return null;
-  const src = String(input.src ?? input.url ?? "").trim();
-  if (!src) return null;
-  const id = uniqueId(input.id || input.name || "asset", usedIds);
-  const type = inferAssetType(src, input.type || "iframe");
-  const name = String(input.name || defaultAssetName(src, type)).trim() || "Asset";
-
-  return {
-    id,
-    name,
-    type,
-    src,
-    sourceWidth: Math.max(0, toInt(input.sourceWidth, 0)),
-    sourceHeight: Math.max(0, toInt(input.sourceHeight, 0)),
-    createdAt: String(input.createdAt || new Date().toISOString()),
-  };
-}
-
-function defaultAssetName(src, type) {
-  if (type === "image") return "Imagem";
-  try {
-    const url = new URL(src);
-    return url.hostname || "Fonte externa";
-  } catch {
-    return "Fonte externa";
-  }
 }
 
 function normalizeEditor(editor = {}) {
