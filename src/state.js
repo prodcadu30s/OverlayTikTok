@@ -142,7 +142,7 @@ function normalizeOverlayList(list) {
 export function normalizeOverlay(input) {
   if (!input || typeof input !== "object") return null;
   const rawSrc = String(input.src ?? input.url ?? "").trim();
-  const src = isMediaSource(rawSrc) ? "about:blank" : rawSrc;
+  const src = isUnsupportedMediaSource(rawSrc) ? "about:blank" : rawSrc;
   const type = inferAssetType(src, input.type || "iframe");
   const width = Math.max(20, toInt(input.width ?? input.w, 420));
   const height = Math.max(20, toInt(input.height ?? input.h, 240));
@@ -191,12 +191,11 @@ function normalizeSourceSize(value, fallback, cropStart = 0, cropEnd = 0) {
   return clamp(raw, minimum, MAX_SOURCE_SIZE);
 }
 
-function isMediaSource(source) {
+function isUnsupportedMediaSource(source) {
   const src = String(source || "").split("?")[0].split("#")[0].toLowerCase();
   return src.startsWith("omdb://")
-    || src.startsWith("data:image/")
     || src.startsWith("data:video/")
-    || /\.(gif|webm|png|jpe?g|avif|webp|bmp|svg|mp4|mov|m4v|ogg|ogv)$/.test(src);
+    || /\.(gif|webm|mp4|mov|m4v|ogg|ogv)$/.test(src);
 }
 
 function clampCropForSource(crop, sourceWidth, sourceHeight) {

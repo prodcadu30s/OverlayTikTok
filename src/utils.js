@@ -48,12 +48,16 @@ export function uniqueId(base, usedIds) {
 }
 
 export function inferAssetType(source = "", fallback = "iframe") {
+  const src = String(source).split("?")[0].split("#")[0].toLowerCase();
+  if (src.startsWith("data:image/")) return "image";
+  if (/\.(png|jpe?g|avif|webp|bmp|svg)$/.test(src)) return "image";
   return ASSET_TYPES.includes(fallback) ? fallback : "iframe";
 }
 
 export function niceType(type) {
   const labels = {
     iframe: "Iframe",
+    image: "Imagem",
   };
   return labels[type] || "Asset";
 }

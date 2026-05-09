@@ -16,7 +16,7 @@ export const DEFAULT_SCENES = [
   { id: "ending", name: "Ending" },
 ];
 
-export const ASSET_TYPES = ["iframe"];
+export const ASSET_TYPES = ["iframe", "image"];
 
 export const LAYOUT_TEMPLATES = [
   {

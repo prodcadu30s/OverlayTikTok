@@ -78,6 +78,17 @@ export function createMediaScaler(overlay, options = {}) {
 }
 
 export function createMediaElement(overlay) {
+  if (overlay.type === "image") {
+    const image = document.createElement("img");
+    image.src = overlay.src || "";
+    image.alt = overlay.name || "Overlay";
+    image.decoding = "async";
+    image.loading = "eager";
+    image.draggable = false;
+    image.className = `overlay-media ${overlay.fit || "fill"}`;
+    return image;
+  }
+
   const element = document.createElement("iframe");
   element.src = overlay.src || "about:blank";
   element.referrerPolicy = "no-referrer";
@@ -161,6 +172,7 @@ function syncMediaElement(node, overlay) {
   if (!media) return;
 
   media.className = `overlay-media ${overlay.fit || "fill"}`;
+  if (media.tagName === "IMG") media.alt = overlay.name || "Overlay";
 }
 
 function hashString(value) {

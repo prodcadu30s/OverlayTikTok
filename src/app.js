@@ -25,8 +25,11 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-preview-bg";
+const RUNTIME_BUILD = "20260509-image-lite";
 const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
+const IMAGE_MAX_DIMENSION = 1920;
+const IMAGE_QUALITY = 0.84;
+const IMAGE_MAX_UPLOAD_SIZE = 24 * 1024 * 1024;
 const MIN_CROP_SCALE = 0.05;
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
@@ -62,6 +65,7 @@ const els = {
   importBtn: document.querySelector("#importBtn"),
   importInput: document.querySelector("#importInput"),
   previewImageInput: document.querySelector("#previewImageInput"),
+  imageAssetInput: document.querySelector("#imageAssetInput"),
 };
 
 let state = normalizeState(loadProject());
@@ -73,6 +77,7 @@ let saveTimer = null;
 let liveFieldEditing = false;
 let dragLayerId = null;
 let layerFilter = "";
+let pendingImageReplaceId = null;
 const undoStack = [];
 const redoStack = [];
 
@@ -359,6 +364,7 @@ function renderLayersPanel(content) {
   addButtons.className = "button-row";
   addButtons.append(
     actionButton("Adicionar iframe", () => addOverlayFromForm({ name, src }), "primary"),
+    actionButton("Imagem otimizada", () => chooseImageFiles()),
   );
 
   const template = selectInput([["", "Templates"], ...LAYOUT_TEMPLATES.map((item) => [item.id, item.name])], "");
@@ -413,6 +419,11 @@ function renderLayersPanel(content) {
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
+    if (overlay.type === "image") {
+      actions.append(
+        miniIconButton("upload", "Trocar imagem", (event) => layerAction(event, () => chooseImageFiles(overlay.id))),
+      );
+    }
     actions.append(
       miniIconButton("copy", "Copiar para outro layout", (event) => layerAction(event, () => copyLayerToOtherLayout(overlay.id))),
       miniIconButton(
@@ -458,7 +469,7 @@ function layerAction(event, fn) {
 function createLayerThumbnail(overlay) {
   const thumb = document.createElement("div");
   thumb.className = `layer-thumb ${overlay.visible === false ? "muted" : ""}`.trim();
-  thumb.textContent = "IFR";
+  thumb.textContent = overlay.type === "image" ? "IMG" : "IFR";
   return thumb;
 }
 
@@ -703,6 +714,9 @@ function renderInspectorPanel(content) {
 
   const buttons = document.createElement("div");
   buttons.className = "button-row";
+  if (overlay.type === "image") {
+    buttons.append(actionButton("Trocar imagem", () => chooseImageFiles(overlay.id)));
+  }
   buttons.append(
     actionButton("Outro layout", () => copyLayerToOtherLayout(overlay.id)),
   );
@@ -1426,10 +1440,138 @@ function addOverlayFromForm(fields) {
   }, "Layer adicionada");
 }
 
+function chooseImageFiles(replaceId = null) {
+  pendingImageReplaceId = replaceId;
+  els.imageAssetInput.multiple = !replaceId;
+  els.imageAssetInput.click();
+}
+
+async function importImageFiles(files, replaceId = null) {
+  const fileList = Array.from(files || []).filter(Boolean);
+  if (!fileList.length) return;
+
+  const unsupported = fileList.find((file) => !isOptimizableImage(file));
+  if (unsupported) {
+    setStatus(`Use PNG, JPG, WebP, AVIF ou BMP: ${unsupported.name}`);
+    return;
+  }
+
+  const tooLarge = fileList.find((file) => file.size > IMAGE_MAX_UPLOAD_SIZE);
+  if (tooLarge) {
+    setStatus(`Imagem muito grande: ${tooLarge.name}`);
+    return;
+  }
+
+  setStatus(fileList.length > 1 ? "Otimizando imagens" : "Otimizando imagem");
+  try {
+    const inputs = [];
+    for (const file of fileList) {
+      inputs.push(await optimizeImageFile(file));
+    }
+
+    mutate(() => {
+      if (replaceId) {
+        const overlay = currentOverlays().find((item) => item.id === replaceId);
+        if (!overlay) return;
+        const input = inputs[0];
+        overlay.name = input.name || overlay.name;
+        overlay.type = "image";
+        overlay.src = input.src;
+        overlay.sourceWidth = input.sourceWidth;
+        overlay.sourceHeight = input.sourceHeight;
+        overlay.crop = { top: 0, right: 0, bottom: 0, left: 0 };
+      } else {
+        inputs.forEach((input) => addOverlayToScene(input));
+      }
+    }, replaceId ? "Imagem trocada" : inputs.length > 1 ? "Imagens adicionadas" : "Imagem adicionada");
+  } catch (error) {
+    console.error(error);
+    setStatus("Erro ao otimizar imagem");
+  }
+}
+
+function isOptimizableImage(file) {
+  const type = String(file?.type || "").toLowerCase();
+  return ["image/png", "image/jpeg", "image/webp", "image/avif", "image/bmp"].includes(type)
+    || /\.(png|jpe?g|webp|avif|bmp)$/i.test(file?.name || "");
+}
+
+async function optimizeImageFile(file) {
+  const image = await loadImageFile(file);
+  const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(image.width, image.height));
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) throw new Error("Canvas indisponivel");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image.element, 0, 0, width, height);
+  const blob = await canvasToBlob(canvas, "image/webp", IMAGE_QUALITY);
+  const src = await blobToDataUrl(blob);
+  return {
+    name: optimizedImageName(file.name),
+    type: "image",
+    src,
+    sourceWidth: width,
+    sourceHeight: height,
+  };
+}
+
+function optimizedImageName(name) {
+  return String(name || "Imagem").replace(/\.[^.]+$/, "") || "Imagem";
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ element: image, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Imagem invalida"));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error("Falha ao comprimir imagem"));
+    }, type, quality);
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 function addOverlayToScene(input, position = null) {
   const preset = presetFor(state.layout);
-  const width = Math.round(preset.width * (state.layout === "vertical" ? 0.48 : 0.28));
-  const height = Math.round(width * 0.56);
+  const imageSourceWidth = Math.max(1, Number(input.sourceWidth || 0));
+  const imageSourceHeight = Math.max(1, Number(input.sourceHeight || 0));
+  const imageScale = input.type === "image" ? Math.min(1, preset.width / imageSourceWidth, preset.height / imageSourceHeight) : 1;
+  const width = input.type === "image"
+    ? Math.max(24, Math.round(imageSourceWidth * imageScale))
+    : Math.round(preset.width * (state.layout === "vertical" ? 0.48 : 0.28));
+  const height = input.type === "image"
+    ? Math.max(24, Math.round(imageSourceHeight * imageScale))
+    : Math.round(width * 0.56);
   const x = position ? clamp(Math.round(position.x - width / 2), 0, preset.width - width) : Math.round((preset.width - width) / 2);
   const y = position ? clamp(Math.round(position.y - height / 2), 0, preset.height - height) : Math.round((preset.height - height) / 2);
   const overlay = normalizeOverlay({
@@ -1841,6 +1983,12 @@ els.importInput.addEventListener("change", () => importProject(els.importInput.f
 els.previewImageInput.addEventListener("change", () => {
   importPreviewImage(els.previewImageInput.files?.[0]);
   els.previewImageInput.value = "";
+});
+els.imageAssetInput.addEventListener("change", () => {
+  importImageFiles(els.imageAssetInput.files, pendingImageReplaceId);
+  pendingImageReplaceId = null;
+  els.imageAssetInput.multiple = true;
+  els.imageAssetInput.value = "";
 });
 window.addEventListener("wheel", onEditorWheel, { passive: false });
 
