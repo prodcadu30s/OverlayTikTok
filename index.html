@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Overlay Manager Pro</title>
-  <link rel="stylesheet" href="./styles.css?v=20260509-runtime-lite">
+  <link rel="stylesheet" href="./styles.css?v=20260509-preview-bg">
 </head>
 <body class="editor-shell">
   <div class="app" id="app">
@@ -57,6 +57,7 @@
         <div class="workspace" id="workspace">
           <div class="stage-wrap" id="stageWrap">
             <div class="stage" id="stage">
+              <div class="stage-preview" id="stagePreview"></div>
               <div class="stage-grid" id="gridLayer"></div>
               <div class="stage-objects" id="stageObjects"></div>
               <div class="guides-layer" id="guidesLayer"></div>
@@ -70,7 +71,8 @@
   </div>
 
   <input id="importInput" type="file" accept="application/json" hidden>
+  <input id="previewImageInput" type="file" accept="image/*" hidden>
 
-  <script type="module" src="./src/app.js?v=20260509-runtime-lite"></script>
+  <script type="module" src="./src/app.js?v=20260509-preview-bg"></script>
 </body>
 </html>

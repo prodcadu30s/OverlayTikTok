@@ -437,6 +437,7 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 5px rgba(50, 208, 196, 0.16), var(--shadow);
 }
 
+.stage-preview,
 .stage-grid,
 .stage-objects,
 .guides-layer {
@@ -444,7 +445,16 @@ input[type="checkbox"] {
   inset: 0;
 }
 
+.stage-preview {
+  z-index: 0;
+  pointer-events: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
 .stage-grid {
+  z-index: 1;
   pointer-events: none;
   opacity: 0.55;
   background-image:
@@ -466,6 +476,10 @@ input[type="checkbox"] {
 .guides-layer {
   pointer-events: none;
   z-index: 999999;
+}
+
+.stage-objects {
+  z-index: 2;
 }
 
 .guide {

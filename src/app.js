@@ -25,7 +25,8 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-runtime-lite";
+const RUNTIME_BUILD = "20260509-preview-bg";
+const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
 const MIN_CROP_SCALE = 0.05;
 const query = new URLSearchParams(window.location.search);
 if (query.get("runtime") === "1") {
@@ -39,6 +40,7 @@ const els = {
   workspace: document.querySelector("#workspace"),
   stageWrap: document.querySelector("#stageWrap"),
   stage: document.querySelector("#stage"),
+  stagePreview: document.querySelector("#stagePreview"),
   gridLayer: document.querySelector("#gridLayer"),
   stageObjects: document.querySelector("#stageObjects"),
   guidesLayer: document.querySelector("#guidesLayer"),
@@ -59,9 +61,11 @@ const els = {
   exportBtn: document.querySelector("#exportBtn"),
   importBtn: document.querySelector("#importBtn"),
   importInput: document.querySelector("#importInput"),
+  previewImageInput: document.querySelector("#previewImageInput"),
 };
 
 let state = normalizeState(loadProject());
+let previewImages = loadPreviewImages();
 let selectedId = null;
 let currentScale = 1;
 let interaction = null;
@@ -226,6 +230,7 @@ function applyStageSize() {
   els.gridLayer.style.setProperty("--grid-size", `${state.editor.gridSize}px`);
   els.gridLayer.classList.toggle("hidden", !state.editor.showGrid || state.editor.performanceMode);
   els.zoomLabel.textContent = state.editor.zoom === 0 ? `${Math.round(currentScale * 100)}% Fit` : `${Math.round(state.editor.zoom * 100)}%`;
+  applyStagePreview();
 }
 
 function renderDocks() {
@@ -740,6 +745,16 @@ function renderPropertiesPanel(content) {
     })),
   );
 
+  const previewButtons = document.createElement("div");
+  previewButtons.className = "button-row";
+  const clearPreview = actionButton("Limpar previa", clearPreviewImage, "danger");
+  clearPreview.disabled = !activePreviewImage();
+  previewButtons.append(
+    actionButton(activePreviewImage() ? "Trocar previa" : "Adicionar previa", choosePreviewImage),
+    clearPreview,
+  );
+  content.append(fieldBlock("Imagem guia", previewButtons));
+
   const runtimeButtons = document.createElement("div");
   runtimeButtons.className = "button-row";
   runtimeButtons.append(
@@ -761,6 +776,87 @@ function renderPropertiesPanel(content) {
   dangerButtons.className = "button-row";
   dangerButtons.append(actionButton("Limpar projeto", resetProject, "danger"));
   content.appendChild(dangerButtons);
+}
+
+function loadPreviewImages() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PREVIEW_STORAGE_KEY) || "{}");
+    return {
+      horizontal: typeof parsed.horizontal === "string" ? parsed.horizontal : "",
+      vertical: typeof parsed.vertical === "string" ? parsed.vertical : "",
+    };
+  } catch {
+    return { horizontal: "", vertical: "" };
+  }
+}
+
+function savePreviewImages() {
+  try {
+    localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(previewImages));
+    return true;
+  } catch (error) {
+    console.warn("Preview image could not be saved", error);
+    return false;
+  }
+}
+
+function activePreviewImage() {
+  return previewImages[state.layout] || "";
+}
+
+function applyStagePreview() {
+  if (!els.stagePreview) return;
+  const image = activePreviewImage();
+  els.stagePreview.style.backgroundImage = image ? `url(${JSON.stringify(image)})` : "";
+}
+
+function choosePreviewImage() {
+  els.previewImageInput.click();
+}
+
+function clearPreviewImage() {
+  if (!activePreviewImage()) {
+    setStatus("Sem previa");
+    return;
+  }
+
+  previewImages[state.layout] = "";
+  savePreviewImages();
+  applyStagePreview();
+  renderDocks();
+  setStatus("Previa removida");
+}
+
+async function importPreviewImage(file) {
+  if (!file) return;
+  if (!file.type?.startsWith("image/")) {
+    setStatus("Use uma imagem");
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    setStatus("Previa muito grande");
+    return;
+  }
+
+  try {
+    previewImages[state.layout] = await readImageDataUrl(file);
+    const saved = savePreviewImages();
+    applyStagePreview();
+    renderDocks();
+    setStatus(saved ? "Previa adicionada" : "Previa temporaria");
+  } catch (error) {
+    console.error(error);
+    setStatus("Erro ao abrir previa");
+  }
+}
+
+function readImageDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderStage() {
@@ -1630,6 +1726,15 @@ function fieldWrap(labelText, input) {
   return wrap;
 }
 
+function fieldBlock(labelText, content) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const label = document.createElement("span");
+  label.textContent = labelText;
+  wrap.append(label, content);
+  return wrap;
+}
+
 function checkWrap(labelText, input) {
   const wrap = document.createElement("label");
   wrap.className = "check-row";
@@ -1733,6 +1838,10 @@ els.saveBtn.addEventListener("click", () => persist("Salvo"));
 els.exportBtn.addEventListener("click", exportProject);
 els.importBtn.addEventListener("click", () => els.importInput.click());
 els.importInput.addEventListener("change", () => importProject(els.importInput.files?.[0]));
+els.previewImageInput.addEventListener("change", () => {
+  importPreviewImage(els.previewImageInput.files?.[0]);
+  els.previewImageInput.value = "";
+});
 window.addEventListener("wheel", onEditorWheel, { passive: false });
 
 window.addEventListener("resize", () => {
