@@ -1014,7 +1014,7 @@ function onPointerMove(event) {
 
   const dx = (event.clientX - interaction.clientX) / Math.max(currentScale, 0.01);
   const dy = (event.clientY - interaction.clientY) / Math.max(currentScale, 0.01);
-  const useSnap = !event.shiftKey;
+  const useSnap = interaction.type === "drag" && !event.shiftKey;
 
   if (interaction.type === "drag") {
     let rect = clampRect({
@@ -1050,20 +1050,14 @@ function onPointerMove(event) {
   }
 
   if (interaction.type === "resize") {
+    const shiftAspect = event.shiftKey && interaction.dir?.length === 2;
     let rect = resizeRect(interaction.startRect, interaction.dir, dx, dy, {
       layout: state.layout,
       fromCenter: event.ctrlKey,
-      shiftKey: event.shiftKey || overlay.keepAspect,
+      shiftKey: shiftAspect || overlay.keepAspect,
       minSize: 24,
     });
-
-    if (useSnap) {
-      const snapped = snapRect(rect, currentOverlays(), overlay.id, state.layout, state.editor.gridSize);
-      rect = snapped.rect;
-      renderGuides(snapped.guides);
-    } else {
-      renderGuides([]);
-    }
+    renderGuides([]);
 
     applyRect(overlay, rect);
     updateSelectedNode(overlay);

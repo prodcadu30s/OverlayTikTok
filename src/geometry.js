@@ -42,34 +42,32 @@ export function resizeRect(startRect, dir, dx, dy, options) {
   const minSize = options.minSize || 20;
   const aspect = startRect.width / Math.max(1, startRect.height);
   const fromCenter = options.fromCenter === true || options.altKey === true;
-  const proportional = options.shiftKey && (dir.length === 2 || dir === "e" || dir === "w" || dir === "n" || dir === "s");
+  const proportional = options.shiftKey === true;
   if (fromCenter) {
     const centerX = startRect.x + startRect.width / 2;
     const centerY = startRect.y + startRect.height / 2;
-    let halfWidth = startRect.width / 2;
-    let halfHeight = startRect.height / 2;
+    let width = startRect.width;
+    let height = startRect.height;
 
-    if (dir.includes("e")) halfWidth += dx;
-    if (dir.includes("w")) halfWidth -= dx;
-    if (dir.includes("s")) halfHeight += dy;
-    if (dir.includes("n")) halfHeight -= dy;
+    if (dir.includes("e")) width += dx * 2;
+    if (dir.includes("w")) width -= dx * 2;
+    if (dir.includes("s")) height += dy * 2;
+    if (dir.includes("n")) height -= dy * 2;
 
-    halfWidth = Math.max(minSize / 2, halfWidth);
-    halfHeight = Math.max(minSize / 2, halfHeight);
+    width = Math.max(minSize, width);
+    height = Math.max(minSize, height);
 
     if (proportional) {
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        halfHeight = halfWidth / aspect;
-      } else {
-        halfWidth = halfHeight * aspect;
-      }
+      const scaled = proportionalSize(startRect, dir, width, height, minSize);
+      width = scaled.width;
+      height = scaled.height;
     }
 
     return clampRect({
-      x: centerX - halfWidth,
-      y: centerY - halfHeight,
-      width: halfWidth * 2,
-      height: halfHeight * 2,
+      x: centerX - width / 2,
+      y: centerY - height / 2,
+      width,
+      height,
     }, options.layout, minSize);
   }
 
@@ -87,24 +85,46 @@ export function resizeRect(startRect, dir, dx, dy, options) {
   let height = Math.max(minSize, bottom - top);
 
   if (proportional) {
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      height = width / aspect;
-    } else {
-      width = height * aspect;
-    }
-
-    if (fromCenter) {
-      left = startRect.x + startRect.width / 2 - width / 2;
-      top = startRect.y + startRect.height / 2 - height / 2;
-    } else {
-      if (dir.includes("w")) left = startRect.x + startRect.width - width;
-      if (!dir.includes("w")) left = startRect.x;
-      if (dir.includes("n")) top = startRect.y + startRect.height - height;
-      if (!dir.includes("n")) top = startRect.y;
-    }
+    const scaled = proportionalSize(startRect, dir, width, height, minSize);
+    width = scaled.width;
+    height = scaled.height;
+    left = proportionalX(startRect, dir, width);
+    top = proportionalY(startRect, dir, height);
   }
 
   return clampRect({ x: left, y: top, width, height }, options.layout, minSize);
+}
+
+function proportionalSize(startRect, dir, width, height, minSize) {
+  const scaleX = width / Math.max(1, startRect.width);
+  const scaleY = height / Math.max(1, startRect.height);
+  let scale;
+
+  if (dir.length === 2) {
+    scale = Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
+  } else if (dir.includes("e") || dir.includes("w")) {
+    scale = scaleX;
+  } else {
+    scale = scaleY;
+  }
+
+  scale = Math.max(scale, minSize / Math.max(1, startRect.width), minSize / Math.max(1, startRect.height));
+  return {
+    width: startRect.width * scale,
+    height: startRect.height * scale,
+  };
+}
+
+function proportionalX(startRect, dir, width) {
+  if (dir.includes("w")) return startRect.x + startRect.width - width;
+  if (dir.includes("e")) return startRect.x;
+  return startRect.x + (startRect.width - width) / 2;
+}
+
+function proportionalY(startRect, dir, height) {
+  if (dir.includes("n")) return startRect.y + startRect.height - height;
+  if (dir.includes("s")) return startRect.y;
+  return startRect.y + (startRect.height - height) / 2;
 }
 
 export function snapRect(rect, overlays, movingId, layout, gridSize) {
