@@ -7,7 +7,7 @@ import {
   rectFromOverlay,
   resizeRect,
   snapRect,
-} from "./geometry.js";
+} from "./geometry.js?v=20260509-resize-scale";
 import { addResizeHandles, applyMediaTransform, createOverlayNode, mediaSignature, syncOverlayNode } from "./media.js";
 import { loadProject, normalizeOverlay, normalizeState, saveProject } from "./state.js";
 import {
@@ -25,7 +25,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-image-lite";
+const RUNTIME_BUILD = "20260509-resize-scale";
 const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
 const IMAGE_MAX_DIMENSION = 1920;
 const IMAGE_QUALITY = 0.84;
