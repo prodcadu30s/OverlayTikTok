@@ -14,6 +14,7 @@ export function createDefaultState() {
     layout: "horizontal",
     currentSceneId: DEFAULT_SCENES[0].id,
     editor: clone(DEFAULT_EDITOR),
+    assets: [],
     scenes: DEFAULT_SCENES.map((scene) => ({
       id: scene.id,
       name: scene.name,
@@ -68,6 +69,7 @@ export function normalizeState(input) {
   base.layout = input.layout === "vertical" || input.layout === "portrait" ? "vertical" : "horizontal";
   base.currentSceneId = typeof input.currentSceneId === "string" ? input.currentSceneId : base.currentSceneId;
   base.editor = normalizeEditor(input.editor);
+  base.assets = normalizeAssetList(input.assets);
   const usedSceneIds = new Set();
   const scenes = [];
   const inputScenes = Array.isArray(input.scenes) ? input.scenes : [];
@@ -137,6 +139,55 @@ function normalizeOverlayList(list) {
     overlay.z = (index + 1) * 10;
   });
   return normalized;
+}
+
+function normalizeAssetList(list) {
+  if (!Array.isArray(list)) return [];
+
+  const usedIds = new Set();
+  return list
+    .map((asset) => normalizeAsset(asset, usedIds))
+    .filter(Boolean);
+}
+
+function normalizeAsset(input, usedIds) {
+  if (!input || typeof input !== "object") return null;
+
+  const rawSrc = String(input.src ?? input.url ?? "").trim();
+  const src = isUnsupportedMediaSource(rawSrc) ? "" : rawSrc;
+  if (!src) return null;
+
+  const type = inferAssetType(src, input.type || "iframe");
+  const fallbackSize = type === "image" ? 240 : 420;
+  const width = clamp(toInt(input.width, fallbackSize), 20, MAX_SOURCE_SIZE);
+  const height = clamp(toInt(input.height, type === "image" ? fallbackSize : 240), 20, MAX_SOURCE_SIZE);
+  const baseId = String(input.id || uid("asset")).trim() || uid("asset");
+  let id = baseId;
+  let index = 2;
+  while (usedIds.has(id)) {
+    id = `${baseId}-${index}`;
+    index += 1;
+  }
+  usedIds.add(id);
+
+  return {
+    id,
+    name: String(input.name || "Asset").trim() || "Asset",
+    type,
+    src,
+    width,
+    height,
+    sourceWidth: normalizeSourceSize(input.sourceWidth ?? input.frameWidth, width),
+    sourceHeight: normalizeSourceSize(input.sourceHeight ?? input.frameHeight, height),
+    crop: normalizeCrop(input.crop),
+    opacity: clamp(toNumber(input.opacity, 1), 0, 1),
+    rotation: clamp(toNumber(input.rotation, 0), -360, 360),
+    radius: clamp(toInt(input.radius, 0), 0, 500),
+    borderWidth: clamp(toInt(input.borderWidth, 0), 0, 80),
+    borderColor: String(input.borderColor || "#ffffff").trim() || "#ffffff",
+    keepAspect: input.keepAspect === true,
+    group: String(input.group || "").trim(),
+  };
 }
 
 export function normalizeOverlay(input) {

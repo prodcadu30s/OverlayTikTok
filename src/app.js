@@ -241,7 +241,7 @@ function applyStageSize() {
 function renderDocks() {
   els.leftDock.innerHTML = "";
   els.rightDock.innerHTML = "";
-  for (const key of ["scenes", "layers", "inspector", "properties"]) {
+  for (const key of ["scenes", "layers", "assets", "inspector", "properties"]) {
     const panel = createPanel(key);
     const dock = state.editor.panels[key].dock === "left" ? els.leftDock : els.rightDock;
     dock.appendChild(panel);
@@ -287,7 +287,16 @@ function createPanel(key) {
 }
 
 function togglePanel(key) {
-  state.editor.panels[key].open = !state.editor.panels[key].open;
+  const panel = state.editor.panels[key];
+  if (!panel) return;
+
+  panel.open = !panel.open;
+  if (panel.open && key === "layers" && state.editor.panels.assets) {
+    state.editor.panels.assets.open = false;
+  }
+  if (panel.open && key === "assets" && state.editor.panels.layers) {
+    state.editor.panels.layers.open = false;
+  }
   scheduleSave("Layout salvo");
   renderDocks();
 }
@@ -301,6 +310,7 @@ function dockPanel(key) {
 function renderPanelContent(key, content) {
   if (key === "scenes") renderScenesPanel(content);
   if (key === "layers") renderLayersPanel(content);
+  if (key === "assets") renderAssetsPanel(content);
   if (key === "inspector") renderInspectorPanel(content);
   if (key === "properties") renderPropertiesPanel(content);
 }
@@ -331,24 +341,25 @@ function renderScenesPanel(content) {
       duplicateScene(scene.id);
     });
 
+    const edit = miniIconButton("edit", "Renomear cena", (event) => {
+      event.stopPropagation();
+      renameScene(scene.id);
+    });
+
     const remove = miniIconButton("x", "Excluir cena", (event) => {
       event.stopPropagation();
       deleteScene(scene.id);
     }, "danger");
     remove.disabled = state.scenes.length <= 1;
 
-    actions.append(copy, remove);
+    actions.append(copy, edit, remove);
     row.append(info, actions);
     list.appendChild(row);
   });
 
   const buttons = document.createElement("div");
   buttons.className = "button-row";
-  buttons.append(
-    actionButton("Nova", () => addScene()),
-    actionButton("Renomear", () => renameActiveScene()),
-    actionButton("Excluir", () => deleteScene(state.currentSceneId), "danger"),
-  );
+  buttons.append(actionButton("Nova", () => addScene()));
 
   content.append(list, buttons);
 }
@@ -361,10 +372,10 @@ function renderLayersPanel(content) {
   grid.append(fieldWrap("Nome", name));
 
   const addButtons = document.createElement("div");
-  addButtons.className = "button-row";
+  addButtons.className = "button-row compact-actions";
   addButtons.append(
-    actionButton("Adicionar iframe", () => addOverlayFromForm({ name, src }), "primary"),
-    actionButton("Imagem otimizada", () => chooseImageFiles()),
+    actionButton("Iframe", () => addOverlayFromForm({ name, src }), "primary compact-action"),
+    actionButton("Imagem", () => chooseImageFiles(), "compact-action"),
   );
 
   const template = selectInput([["", "Templates"], ...LAYOUT_TEMPLATES.map((item) => [item.id, item.name])], "");
@@ -451,7 +462,15 @@ function renderLayersPanel(content) {
     actionButton("Duplicar", () => duplicateSelected()),
     actionButton("Excluir", () => deleteSelected(), "danger"),
   );
-  content.append(grid, fieldWrap("Source", src), addButtons, fieldWrap("Template", template), fieldWrap("Filtro", filter), list, layerButtons);
+  content.append(
+    grid,
+    fieldWrap("Source", src),
+    addButtons,
+    fieldWrap("Template", template),
+    fieldWrap("Filtro", filter),
+    list,
+    layerButtons,
+  );
 }
 
 function updateLayerFilterVisibility() {
@@ -459,6 +478,72 @@ function updateLayerFilterVisibility() {
   document.querySelectorAll(".layer-row").forEach((row) => {
     row.hidden = Boolean(needle) && !String(row.dataset.search || "").includes(needle);
   });
+}
+
+function renderAssetsPanel(content) {
+  content.appendChild(renderAssetsLibrary());
+}
+
+function renderAssetsLibrary() {
+  const wrap = document.createElement("div");
+  wrap.className = "asset-library";
+
+  const saveRow = document.createElement("div");
+  saveRow.className = "asset-save-row";
+  const saveButton = actionButton("Salvar atual", saveSelectedAsAsset, "compact-action");
+  saveButton.title = "Salvar layer como asset";
+  saveButton.disabled = !selectedOverlay();
+  saveRow.append(saveButton);
+
+  const list = document.createElement("div");
+  list.className = "asset-list";
+  const assets = Array.isArray(state.assets) ? state.assets : [];
+
+  if (!assets.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty compact-empty";
+    empty.textContent = "Sem assets salvos";
+    list.appendChild(empty);
+  }
+
+  assets.forEach((asset) => {
+    const row = document.createElement("div");
+    row.className = "asset-row";
+    row.addEventListener("dblclick", () => addAssetToCurrentScene(asset.id));
+
+    const thumb = document.createElement("div");
+    thumb.className = "asset-thumb";
+    thumb.textContent = asset.type === "image" ? "IMG" : "IFR";
+
+    const info = document.createElement("div");
+    info.className = "asset-info";
+    const title = document.createElement("div");
+    title.className = "row-title";
+    title.textContent = asset.name;
+    const subtitle = document.createElement("div");
+    subtitle.className = "row-subtitle";
+    subtitle.textContent = niceType(asset.type);
+    info.append(title, subtitle);
+
+    const actions = document.createElement("div");
+    actions.className = "asset-actions";
+    actions.append(
+      miniIconButton("plus", "Adicionar asset na cena", (event) => {
+        event.stopPropagation();
+        addAssetToCurrentScene(asset.id);
+      }),
+      miniIconButton("x", "Remover asset", (event) => {
+        event.stopPropagation();
+        deleteAsset(asset.id);
+      }, "danger"),
+    );
+
+    row.append(thumb, info, actions);
+    list.appendChild(row);
+  });
+
+  wrap.append(saveRow, list);
+  return wrap;
 }
 
 function layerAction(event, fn) {
@@ -1362,8 +1447,9 @@ function addScene() {
   }, "Cena criada");
 }
 
-function renameActiveScene() {
-  const scene = activeScene();
+function renameScene(sceneId) {
+  const scene = state.scenes.find((item) => item.id === sceneId);
+  if (!scene) return;
   const name = prompt("Nome da cena:", scene.name);
   if (!name) return;
   mutate(() => {
@@ -1427,11 +1513,13 @@ function addOverlayFromForm(fields) {
   }
 
   mutate(() => {
-    addOverlayToScene({
+    const input = {
       name: fields.name.value.trim() || "Iframe",
       type: "iframe",
       src,
-    });
+    };
+    const overlay = addOverlayToScene(input);
+    upsertAsset(overlay || input);
   }, "Layer adicionada");
 }
 
@@ -1475,14 +1563,87 @@ async function importImageFiles(files, replaceId = null) {
         overlay.sourceWidth = input.sourceWidth;
         overlay.sourceHeight = input.sourceHeight;
         overlay.crop = { top: 0, right: 0, bottom: 0, left: 0 };
+        upsertAsset(overlay);
       } else {
-        inputs.forEach((input) => addOverlayToScene(input));
+        inputs.forEach((input) => {
+          const overlay = addOverlayToScene(input);
+          upsertAsset(overlay || input);
+        });
       }
     }, replaceId ? "Imagem trocada" : inputs.length > 1 ? "Imagens adicionadas" : "Imagem adicionada");
   } catch (error) {
     console.error(error);
     setStatus("Erro ao otimizar imagem");
   }
+}
+
+function saveSelectedAsAsset() {
+  const overlay = selectedOverlay();
+  if (!overlay) {
+    setStatus("Selecione uma layer");
+    return;
+  }
+
+  mutate(() => {
+    upsertAsset(overlay);
+  }, "Asset salvo");
+}
+
+function addAssetToCurrentScene(assetId) {
+  const asset = (state.assets || []).find((item) => item.id === assetId);
+  if (!asset) return;
+
+  mutate(() => {
+    addOverlayToScene(asset);
+  }, "Asset adicionado");
+}
+
+function deleteAsset(assetId) {
+  mutate(() => {
+    state.assets = (state.assets || []).filter((asset) => asset.id !== assetId);
+  }, "Asset removido");
+}
+
+function upsertAsset(input) {
+  const asset = reusableAssetFromInput(input);
+  if (!asset) return null;
+
+  if (!Array.isArray(state.assets)) state.assets = [];
+  const existing = state.assets.find((item) => item.type === asset.type && item.src === asset.src);
+  if (existing) {
+    Object.assign(existing, asset, { id: existing.id });
+    return existing;
+  }
+
+  state.assets.unshift(asset);
+  return asset;
+}
+
+function reusableAssetFromInput(input) {
+  const src = String(input?.src || "").trim();
+  if (!src) return null;
+
+  const type = input.type === "image" ? "image" : "iframe";
+  const width = Math.max(20, toInt(input.width, type === "image" ? input.sourceWidth || 240 : 420));
+  const height = Math.max(20, toInt(input.height, type === "image" ? input.sourceHeight || 240 : 240));
+  return {
+    id: uid("asset"),
+    name: String(input.name || niceType(type)).trim() || niceType(type),
+    type,
+    src,
+    width,
+    height,
+    sourceWidth: Math.max(20, toInt(input.sourceWidth, width)),
+    sourceHeight: Math.max(20, toInt(input.sourceHeight, height)),
+    crop: clone(input.crop || { top: 0, right: 0, bottom: 0, left: 0 }),
+    opacity: toNumber(input.opacity, 1),
+    rotation: toNumber(input.rotation, 0),
+    radius: toInt(input.radius, 0),
+    borderWidth: toInt(input.borderWidth, 0),
+    borderColor: String(input.borderColor || "#ffffff"),
+    keepAspect: input.keepAspect === true,
+    group: String(input.group || "").trim(),
+  };
 }
 
 function isOptimizableImage(file) {
@@ -1558,21 +1719,34 @@ function blobToDataUrl(blob) {
 
 function addOverlayToScene(input, position = null) {
   const preset = presetFor(state.layout);
+  const type = input.type === "image" ? "image" : "iframe";
   const imageSourceWidth = Math.max(1, Number(input.sourceWidth || 0));
   const imageSourceHeight = Math.max(1, Number(input.sourceHeight || 0));
-  const imageScale = input.type === "image" ? Math.min(1, preset.width / imageSourceWidth, preset.height / imageSourceHeight) : 1;
-  const width = input.type === "image"
-    ? Math.max(24, Math.round(imageSourceWidth * imageScale))
-    : Math.round(preset.width * (state.layout === "vertical" ? 0.48 : 0.28));
-  const height = input.type === "image"
-    ? Math.max(24, Math.round(imageSourceHeight * imageScale))
-    : Math.round(width * 0.56);
+  const savedWidth = toInt(input.width, 0);
+  const savedHeight = toInt(input.height, 0);
+  let width = savedWidth;
+  let height = savedHeight;
+
+  if (width > 0 && height > 0) {
+    const scale = Math.min(1, (preset.width * 0.92) / width, (preset.height * 0.92) / height);
+    width = Math.max(24, Math.round(width * scale));
+    height = Math.max(24, Math.round(height * scale));
+  } else if (type === "image") {
+    const imageScale = Math.min(1, preset.width / imageSourceWidth, preset.height / imageSourceHeight);
+    width = Math.max(24, Math.round(imageSourceWidth * imageScale));
+    height = Math.max(24, Math.round(imageSourceHeight * imageScale));
+  } else {
+    width = Math.round(preset.width * (state.layout === "vertical" ? 0.48 : 0.28));
+    height = Math.round(width * 0.56);
+  }
+
   const x = position ? clamp(Math.round(position.x - width / 2), 0, preset.width - width) : Math.round((preset.width - width) / 2);
   const y = position ? clamp(Math.round(position.y - height / 2), 0, preset.height - height) : Math.round((preset.height - height) / 2);
   const overlay = normalizeOverlay({
+    ...input,
     id: uid("ov"),
     name: input.name,
-    type: input.type,
+    type,
     src: input.src,
     x,
     y,
@@ -1587,6 +1761,7 @@ function addOverlayToScene(input, position = null) {
   currentOverlays().push(overlay);
   normalizeLayerOrder();
   selectedId = overlay.id;
+  return overlay;
 }
 
 function selectOverlay(id) {

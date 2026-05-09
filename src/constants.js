@@ -60,6 +60,7 @@ export const LAYOUT_TEMPLATES = [
 export const PANEL_DEFAULTS = {
   scenes: { title: "Scenes", open: true, dock: "left" },
   layers: { title: "Layers", open: true, dock: "right" },
+  assets: { title: "Assets", open: false, dock: "right" },
   inspector: { title: "Inspector", open: true, dock: "right" },
   properties: { title: "Properties", open: true, dock: "right" },
 };
