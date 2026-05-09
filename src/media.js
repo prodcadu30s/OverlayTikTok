@@ -16,17 +16,21 @@ export function createOverlayNode(overlay, options = {}) {
   viewport.className = "overlay-viewport";
   viewport.appendChild(createMediaScaler(overlay, options));
 
-  const label = document.createElement("div");
-  label.className = "overlay-label";
-  label.textContent = `${overlay.name || "Overlay"} | ${Math.round(overlay.x)},${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
-  if (hasCrop(overlay)) {
-    const badge = document.createElement("span");
-    badge.className = "crop-badge";
-    badge.textContent = "crop";
-    label.appendChild(badge);
-  }
+  if (options.runtime) {
+    node.appendChild(viewport);
+  } else {
+    const label = document.createElement("div");
+    label.className = "overlay-label";
+    label.textContent = `${overlay.name || "Overlay"} | ${Math.round(overlay.x)},${Math.round(overlay.y)} | ${Math.round(overlay.width)}x${Math.round(overlay.height)}`;
+    if (hasCrop(overlay)) {
+      const badge = document.createElement("span");
+      badge.className = "crop-badge";
+      badge.textContent = "crop";
+      label.appendChild(badge);
+    }
 
-  node.append(viewport, label);
+    node.append(viewport, label);
+  }
   syncOverlayNode(node, overlay, options);
   return node;
 }
@@ -42,7 +46,10 @@ export function syncOverlayNode(node, overlay, options = {}) {
 
 export function mediaSignature(overlay, options = {}) {
   const mode = options.performanceMode && !options.runtime ? "placeholder" : "media";
-  return `${mode}|${overlay.type || "iframe"}|${hashString(overlay.src || "")}`;
+  const source = sourceBox(overlay);
+  const crop = overlay.crop || { top: 0, right: 0, bottom: 0, left: 0 };
+  const structure = canUseDirectRuntimeMedia(overlay, options, source, crop) ? "direct" : "scaler";
+  return `${mode}|${structure}|${overlay.type || "iframe"}|${hashString(overlay.src || "")}`;
 }
 
 export function createMediaScaler(overlay, options = {}) {
@@ -60,11 +67,21 @@ export function createMediaScaler(overlay, options = {}) {
   const scaleX = overlay.width / visibleWidth;
   const scaleY = overlay.height / visibleHeight;
 
+  if (canUseDirectRuntimeMedia(overlay, options, source, crop)) {
+    const direct = createMediaElement(overlay);
+    Object.assign(direct.style, {
+      inset: "0",
+      width: "100%",
+      height: "100%",
+    });
+    return direct;
+  }
+
   const scaler = document.createElement("div");
   scaler.className = "overlay-scaler";
   scaler.style.width = `${visibleWidth}px`;
   scaler.style.height = `${visibleHeight}px`;
-  scaler.style.transform = `scale(${scaleX}, ${scaleY})`;
+  applyScaleTransform(scaler, scaleX, scaleY);
 
   const element = createMediaElement(overlay);
   Object.assign(element.style, {
@@ -100,19 +117,19 @@ export function createMediaElement(overlay) {
 }
 
 export function applyOverlayStyle(node, overlay) {
-  node.style.left = `${Math.round(overlay.x)}px`;
-  node.style.top = `${Math.round(overlay.y)}px`;
-  node.style.width = `${Math.round(overlay.width)}px`;
-  node.style.height = `${Math.round(overlay.height)}px`;
-  node.style.zIndex = String(overlay.z || 0);
-  node.style.opacity = String(overlay.opacity ?? 1);
-  node.style.transform = `rotate(${Number(overlay.rotation || 0)}deg)`;
-  node.style.borderRadius = `${Math.max(0, Number(overlay.radius || 0))}px`;
-  node.style.borderWidth = overlay.borderWidth ? `${Math.max(0, Number(overlay.borderWidth || 0))}px` : "";
-  node.style.borderColor = overlay.borderWidth ? (overlay.borderColor || "rgba(255, 255, 255, 0.28)") : "";
-  node.style.boxShadow = "";
+  setStyleValue(node.style, "left", `${Math.round(overlay.x)}px`);
+  setStyleValue(node.style, "top", `${Math.round(overlay.y)}px`);
+  setStyleValue(node.style, "width", `${Math.round(overlay.width)}px`);
+  setStyleValue(node.style, "height", `${Math.round(overlay.height)}px`);
+  setStyleValue(node.style, "zIndex", String(overlay.z || 0));
+  setStyleValue(node.style, "opacity", String(overlay.opacity ?? 1));
+  setStyleValue(node.style, "transform", Number(overlay.rotation || 0) ? `rotate(${Number(overlay.rotation || 0)}deg)` : "");
+  setStyleValue(node.style, "borderRadius", `${Math.max(0, Number(overlay.radius || 0))}px`);
+  setStyleValue(node.style, "borderWidth", overlay.borderWidth ? `${Math.max(0, Number(overlay.borderWidth || 0))}px` : "");
+  setStyleValue(node.style, "borderColor", overlay.borderWidth ? (overlay.borderColor || "rgba(255, 255, 255, 0.28)") : "");
+  setStyleValue(node.style, "boxShadow", "");
   const viewport = node.querySelector(".overlay-viewport");
-  if (viewport) viewport.style.filter = "";
+  if (viewport) setStyleValue(viewport.style, "filter", "");
   node.classList.toggle("hidden", overlay.visible === false);
   node.classList.toggle("locked", overlay.locked === true);
   applyMediaTransform(node, overlay);
@@ -130,13 +147,13 @@ export function applyMediaTransform(node, overlay) {
   const scaleX = overlay.width / visibleWidth;
   const scaleY = overlay.height / visibleHeight;
 
-  scaler.style.width = `${visibleWidth}px`;
-  scaler.style.height = `${visibleHeight}px`;
-  scaler.style.transform = `scale(${scaleX}, ${scaleY})`;
-  media.style.left = `${-crop.left}px`;
-  media.style.top = `${-crop.top}px`;
-  media.style.width = `${source.width}px`;
-  media.style.height = `${source.height}px`;
+  setStyleValue(scaler.style, "width", `${visibleWidth}px`);
+  setStyleValue(scaler.style, "height", `${visibleHeight}px`);
+  applyScaleTransform(scaler, scaleX, scaleY);
+  setStyleValue(media.style, "left", `${-crop.left}px`);
+  setStyleValue(media.style, "top", `${-crop.top}px`);
+  setStyleValue(media.style, "width", `${source.width}px`);
+  setStyleValue(media.style, "height", `${source.height}px`);
 }
 
 export function addResizeHandles(node) {
@@ -173,6 +190,21 @@ function syncMediaElement(node, overlay) {
 
   media.className = `overlay-media ${overlay.fit || "fill"}`;
   if (media.tagName === "IMG") media.alt = overlay.name || "Overlay";
+}
+
+function canUseDirectRuntimeMedia(overlay, options, source, crop) {
+  if (!options.runtime || hasCrop({ crop })) return false;
+  return Math.round(source.width) === Math.round(Number(overlay.width || 0))
+    && Math.round(source.height) === Math.round(Number(overlay.height || 0));
+}
+
+function applyScaleTransform(element, scaleX, scaleY) {
+  const isIdentity = Math.abs(scaleX - 1) < 0.001 && Math.abs(scaleY - 1) < 0.001;
+  setStyleValue(element.style, "transform", isIdentity ? "" : `scale(${scaleX}, ${scaleY})`);
+}
+
+function setStyleValue(style, property, value) {
+  if (style[property] !== value) style[property] = value;
 }
 
 function hashString(value) {

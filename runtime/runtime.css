@@ -1,0 +1,114 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.runtime-shell,
+.runtime-root,
+.runtime-stage {
+  background: transparent;
+}
+
+.runtime-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.runtime-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  contain: strict;
+}
+
+.overlay-node {
+  position: absolute;
+  min-width: 12px;
+  min-height: 12px;
+  overflow: hidden;
+  border-style: solid;
+  border-width: 0;
+  border-color: transparent;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+  transform-origin: center center;
+  contain: layout paint style;
+}
+
+.overlay-node.hidden {
+  display: none;
+}
+
+.overlay-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: transparent;
+  contain: layout paint style;
+}
+
+.overlay-scaler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
+.overlay-media {
+  position: absolute;
+  max-width: none;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  pointer-events: none;
+  display: block;
+}
+
+.overlay-media.fill {
+  object-fit: fill;
+}
+
+.overlay-media.contain {
+  object-fit: contain;
+}
+
+.overlay-media.cover {
+  object-fit: cover;
+}
+
+.overlay-label,
+.handle,
+.crop-badge {
+  display: none;
+}
+
+.runtime-error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(760px, 80%);
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(239, 91, 91, 0.8);
+  border-radius: 8px;
+  color: #fff4f4;
+  background: rgba(18, 20, 23, 0.96);
+  padding: 22px 26px;
+  text-align: center;
+  font: 700 30px/1.35 Arial, sans-serif;
+}

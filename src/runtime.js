@@ -7,12 +7,15 @@ const stage = document.querySelector("#runtimeStage");
 const layout = document.body.dataset.layout === "vertical" ? "vertical" : "horizontal";
 const params = new URLSearchParams(location.search);
 let embeddedState = null;
-let state = normalizeState(loadProject());
-let lastStorageSnapshot = localStorage.getItem(STORAGE_KEY) || "";
+let state = null;
+let lastStorageSnapshot = "";
 let liveStorage = params.get("live") === "1";
 let runtimeLoadFailed = false;
+let lastRuntimeSizeKey = "";
+let resizeFrame = 0;
 
 function activeScene() {
+  if (!state) return null;
   return state.scenes.find((scene) => scene.id === state.currentSceneId) || state.scenes[0];
 }
 
@@ -32,6 +35,10 @@ function applyRuntimeSize() {
   if (Math.abs(scale - 1) < 0.01) scale = 1;
   const scaledWidth = Math.round(preset.width * scale);
   const scaledHeight = Math.round(preset.height * scale);
+  const sizeKey = `${viewportWidth}x${viewportHeight}|${scale}`;
+  if (sizeKey === lastRuntimeSizeKey) return;
+  lastRuntimeSizeKey = sizeKey;
+
   stage.style.width = `${preset.width}px`;
   stage.style.height = `${preset.height}px`;
   stage.style.left = `${Math.round((viewportWidth - scaledWidth) / 2)}px`;
@@ -45,6 +52,7 @@ function render() {
     Array.from(stage.querySelectorAll(".overlay-node")).map((node) => [node.dataset.id, node]),
   );
   const activeIds = new Set();
+  const fragment = document.createDocumentFragment();
 
   overlaysForRuntime().forEach((overlay) => {
     const options = { runtime: true, selected: false, performanceMode: false };
@@ -57,13 +65,15 @@ function render() {
       node = replacement;
     } else if (!node) {
       node = createOverlayNode(overlay, options);
-      stage.appendChild(node);
+      fragment.appendChild(node);
     } else {
       syncOverlayNode(node, overlay, options);
     }
 
     activeIds.add(overlay.id);
   });
+
+  if (fragment.childNodes.length) stage.appendChild(fragment);
 
   existingNodes.forEach((node, id) => {
     if (!activeIds.has(id)) node.remove();
@@ -126,7 +136,15 @@ function base64UrlToBytes(value) {
   return bytes;
 }
 
-window.addEventListener("resize", applyRuntimeSize);
+function scheduleRuntimeSize() {
+  if (resizeFrame) return;
+  resizeFrame = window.requestAnimationFrame(() => {
+    resizeFrame = 0;
+    applyRuntimeSize();
+  });
+}
+
+window.addEventListener("resize", scheduleRuntimeSize, { passive: true });
 
 async function boot() {
   embeddedState = await loadEmbeddedProject();
@@ -138,6 +156,9 @@ async function boot() {
   if (embeddedState) {
     state = normalizeState(embeddedState);
     liveStorage = false;
+  } else {
+    state = normalizeState(loadProject());
+    lastStorageSnapshot = liveStorage ? localStorage.getItem(STORAGE_KEY) || "" : "";
   }
 
   if (liveStorage) {

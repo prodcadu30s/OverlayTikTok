@@ -25,7 +25,7 @@ import {
   uniqueId,
 } from "./utils.js";
 
-const RUNTIME_BUILD = "20260509-shift-free-scale";
+const RUNTIME_BUILD = "20260509-runtime-perf";
 const PREVIEW_STORAGE_KEY = "overlay_preview_backgrounds_v1";
 const IMAGE_MAX_DIMENSION = 1920;
 const IMAGE_QUALITY = 0.84;
@@ -841,6 +841,13 @@ function renderPropertiesPanel(content) {
       mutate(() => {
         state.editor.showGrid = value;
       }, "Grid salvo");
+    })),
+  );
+  content.append(
+    checkWrap("Modo leve", propertiesCheckbox(state.editor.performanceMode, (value) => {
+      mutate(() => {
+        state.editor.performanceMode = value;
+      }, "Modo leve salvo");
     })),
   );
 
@@ -1926,13 +1933,12 @@ async function createRuntimePayload(layout) {
     },
   };
 
-  const runtimeState = normalizeState({
+  const runtimeState = {
     version: project.version,
     layout,
     currentSceneId: runtimeScene.id,
-    editor: project.editor,
     scenes: [runtimeScene],
-  });
+  };
 
   return encodeRuntimeProject(runtimeState);
 }
@@ -1940,7 +1946,20 @@ async function createRuntimePayload(layout) {
 async function encodeRuntimeProject(project) {
   const json = JSON.stringify(project);
   const bytes = new TextEncoder().encode(json);
+  if ("CompressionStream" in window && bytes.length > 1024) {
+    try {
+      const compressed = await compressBytes(bytes);
+      if (compressed.length < bytes.length) return `gz.${bytesToBase64Url(compressed)}`;
+    } catch (error) {
+      console.warn("Runtime compression failed", error);
+    }
+  }
   return `json.${bytesToBase64Url(bytes)}`;
+}
+
+async function compressBytes(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 function bytesToBase64Url(bytes) {

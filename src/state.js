@@ -100,7 +100,7 @@ function normalizeEditor(editor = {}) {
   base.zoom = editor.zoom === 0 ? 0 : clamp(editor.zoom, 0.15, 2.5);
   base.gridSize = clamp(toInt(editor.gridSize, 20), 5, 160);
   base.showGrid = editor.showGrid !== false;
-  base.performanceMode = false;
+  base.performanceMode = editor.performanceMode === true;
   base.panels = clone(DEFAULT_EDITOR.panels);
 
   for (const key of Object.keys(base.panels)) {
